@@ -1,15 +1,17 @@
 services:
-  app:
+  web:
     build:
       context: .
-      target: app
+      target: web
     restart: unless-stopped
+    expose:
+      - "80"
     environment:
       APP_NAME: ${APP_NAME:-SMVS Happy Family}
       APP_ENV: ${APP_ENV:-production}
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?APP_KEY is required}
       APP_DEBUG: ${APP_DEBUG:-false}
-      APP_URL: ${APP_URL}
+      APP_URL: ${APP_URL:?APP_URL is required}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
       APP_LOCALE: ${APP_LOCALE:-en}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
@@ -18,12 +20,13 @@ services:
       DB_PORT: 5432
       DB_DATABASE: ${DB_DATABASE:-happy_family}
       DB_USERNAME: ${DB_USERNAME:-happy_family}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+      REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -31,8 +34,8 @@ services:
       RUN_MIGRATIONS: "true"
       SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
       SUPER_ADMIN_NAME: ${SUPER_ADMIN_NAME:-SMVS Super Admin}
-      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
       PILOT_DATA: ${PILOT_DATA:-false}
       PILOT_PASSWORD: ${PILOT_PASSWORD:-}
     volumes:
@@ -43,23 +46,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  web:
-    build:
-      context: .
-      target: web
-    restart: unless-stopped
-    expose:
-      - "80"
-    volumes:
-      - app_storage:/var/www/html/storage/app/public:ro
-    depends_on:
-      - app
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/ready"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health/ready >/dev/null || exit 1"]
       interval: 30s
-      timeout: 5s
+      timeout: 8s
       retries: 5
+      start_period: 60s
 
   worker:
     build:
@@ -69,9 +61,9 @@ services:
     command: ["php", "artisan", "queue:work", "redis", "--queue=imports,default", "--sleep=2", "--tries=3", "--timeout=900", "--max-jobs=1000", "--max-time=3600"]
     environment:
       APP_ENV: ${APP_ENV:-production}
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?APP_KEY is required}
       APP_DEBUG: ${APP_DEBUG:-false}
-      APP_URL: ${APP_URL}
+      APP_URL: ${APP_URL:?APP_URL is required}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
       APP_LOCALE: ${APP_LOCALE:-en}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
@@ -80,19 +72,23 @@ services:
       DB_PORT: 5432
       DB_DATABASE: ${DB_DATABASE:-happy_family}
       DB_USERNAME: ${DB_USERNAME:-happy_family}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      FILESYSTEM_DISK: public
       RUN_MIGRATIONS: "false"
     volumes:
+      - app_storage:/var/www/html/storage/app/public
       - app_private:/var/www/html/storage/app/private
     depends_on:
-      - app
+      web:
+        condition: service_healthy
 
   scheduler:
     build:
@@ -102,9 +98,9 @@ services:
     command: ["php", "artisan", "schedule:work"]
     environment:
       APP_ENV: ${APP_ENV:-production}
-      APP_KEY: ${APP_KEY}
+      APP_KEY: ${APP_KEY:?APP_KEY is required}
       APP_DEBUG: ${APP_DEBUG:-false}
-      APP_URL: ${APP_URL}
+      APP_URL: ${APP_URL:?APP_URL is required}
       APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
       APP_LOCALE: ${APP_LOCALE:-en}
       LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
@@ -113,17 +109,23 @@ services:
       DB_PORT: 5432
       DB_DATABASE: ${DB_DATABASE:-happy_family}
       DB_USERNAME: ${DB_USERNAME:-happy_family}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
+      REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      FILESYSTEM_DISK: public
       RUN_MIGRATIONS: "false"
+    volumes:
+      - app_storage:/var/www/html/storage/app/public
+      - app_private:/var/www/html/storage/app/private
     depends_on:
-      - app
+      web:
+        condition: service_healthy
 
   db:
     image: postgres:17-alpine
@@ -131,7 +133,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_DATABASE:-happy_family}
       POSTGRES_USER: ${DB_USERNAME:-happy_family}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -139,6 +141,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   redis:
     image: redis:8-alpine
@@ -153,6 +156,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 5s
 
 volumes:
   postgres_data:

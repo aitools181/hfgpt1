@@ -18,7 +18,7 @@ echo "Backing up PostgreSQL..."
 docker compose exec -T db pg_dump -U "${DB_USERNAME:-happy_family}" -d "${DB_DATABASE:-happy_family}" --clean --if-exists --no-owner --no-privileges > "$out/database.sql"
 
 echo "Backing up public uploads and private import source files..."
-docker compose exec -T app sh -c 'mkdir -p /var/www/html/storage/app/public /var/www/html/storage/app/private && tar -C /var/www/html/storage/app -czf - public private' > "$out/storage-app.tar.gz"
+docker compose exec -T web sh -c 'mkdir -p /var/www/html/storage/app/public /var/www/html/storage/app/private && tar -C /var/www/html/storage/app -czf - public private' > "$out/storage-app.tar.gz"
 
 cp VERSION "$out/VERSION"
 sha256sum "$out/database.sql" "$out/storage-app.tar.gz" "$out/VERSION" > "$out/SHA256SUMS"

@@ -1,8 +1,13 @@
-# Final Handoff - SMVS Happy Family Portal v1.0.1
+# Final Handoff - SMVS Happy Family Portal v1.0.2
 
 ## Package status
 
-This is the cumulative audited source package for Phases 0-7 plus the v1.0.1 stabilization/security pass. It is designed for the user's intended workflow: extract -> push to GitHub -> let GitHub CI validate -> deploy the repository with Docker Compose in Coolify.
+This is the cumulative audited source package for Phases 0-7 plus the v1.0.1 stabilization/security pass and v1.0.2 Coolify deployment hotfix. It is designed for the user's intended workflow: extract -> push to GitHub -> let GitHub CI validate -> deploy the repository with Docker Compose in Coolify.
+
+## v1.0.2 Coolify deployment hotfix
+
+The public `web` service now contains both Nginx and PHP-FPM, with FastCGI bound to `127.0.0.1:9000`. This removes the separate `web -> app:9000` network hop that could surface as a Coolify 502 even when the Nginx container itself was running. Worker and scheduler remain separate containers. Critical Compose variables now fail fast, and the web image validates Nginx/PHP-FPM before accepting traffic.
+
 
 ## Functional completion
 

@@ -17,7 +17,8 @@ python3 - <<'PY'
 import yaml
 with open('docker-compose.yml','r',encoding='utf-8') as f:
     data=yaml.safe_load(f)
-assert isinstance(data,dict) and 'services' in data and {'app','web','worker','scheduler','db','redis'} <= set(data['services'])
+assert isinstance(data,dict) and 'services' in data and {'web','worker','scheduler','db','redis'} <= set(data['services'])
+assert 'app' not in data['services']
 PY
 
 echo "[5/7] Runtime dependencies"
