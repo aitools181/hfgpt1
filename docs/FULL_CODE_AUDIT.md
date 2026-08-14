@@ -1,4 +1,4 @@
-# Full Code Audit - SMVS Happy Family Portal v1.0.1
+# Full Code Audit - SMVS Happy Family Portal v1.0.2
 
 Audit date: 2026-08-14
 
@@ -112,7 +112,7 @@ These are not hidden as passes. The repository GitHub Actions workflow is the re
 
 ## 6. Release acceptance rule
 
-Use this v1.0.1 audited package instead of the earlier v1.0.0 package. Before production data is imported or Coolify is treated as accepted:
+Use this v1.0.2 deployment-hotfix package instead of the earlier v1.0.0/v1.0.1 packages. Before production data is imported or Coolify is treated as accepted:
 
 1. Push the extracted source to the private GitHub repository.
 2. Require the exact commit's GitHub Actions CI to be green.

@@ -47,7 +47,7 @@ Store backups outside the application host and apply the retention policy approv
 - `worker` runs Laravel `queue:work` and is intended for asynchronous workloads.
 - `scheduler` runs `schedule:work`.
 - The inactivity command `happy-family:inactivity-check` runs hourly with overlap protection.
-- If reminders stop appearing, first check the scheduler service logs and then run the command manually in the app container.
+- If reminders stop appearing, first check the scheduler service logs and then run the command manually in the web container.
 
 ## Security operations
 

@@ -1,6 +1,6 @@
 # Role & Permission Matrix
 
-## Roles seeded in v1.0.1
+## Roles seeded in v1.0.2
 
 | Role | Default organizational scope | Module |
 |---|---|---|
@@ -16,7 +16,7 @@
 
 ## Permission architecture
 
-The seed contains the complete v1.0.1 permission set. Permissions remain editable through Settings for authorized role managers.
+The seed contains the complete v1.0.2 permission set. Permissions remain editable through Settings for authorized role managers.
 
 Permission slugs include:
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 - Coolify Deployment Hotfix - 2026-08-14
+
+- Reworked the production HTTP runtime so Nginx and PHP-FPM run in the same `web` container and FastCGI uses `127.0.0.1:9000`, eliminating cross-container FastCGI DNS/connectivity as a Coolify 502 failure mode.
+- Removed the standalone Compose `app` service; queue worker and scheduler still use the reusable PHP application image target.
+- Added explicit PHP-FPM loopback listener configuration, Nginx/PHP-FPM startup validation, local port readiness wait, and Dockerfile + Compose health checks.
+- Made `APP_KEY`, `APP_URL`, and `DB_PASSWORD` fail-fast required Compose variables.
+- Updated backup/restore scripts and Coolify documentation for the new runtime topology.
+
 ## 1.0.1 - Audited Final - 2026-08-14
 
 - Performed a full source-level security, scope, business-rule, deployment and release audit against the SRS/wireframe baseline.

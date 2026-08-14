@@ -2,7 +2,7 @@
 
 Production-oriented cumulative source package implementing the uploaded **SMVS Happy Family Project SRS Version 3.0** and **Full Portal Wireframe Version 2.0**.
 
-Current release: **1.0.1 - Audited Final (Phases 0-7 + stabilization)**
+Current release: **1.0.2 - Coolify Deployment Hotfix (Phases 0-7 + stabilization)**
 
 ## What is included
 
@@ -114,7 +114,7 @@ docker-compose.yml
 3. Generate a Laravel key if needed:
 
 ```bash
-docker compose run --rm -e RUN_MIGRATIONS=false -e SEED_ON_BOOT=false app php artisan key:generate --show
+printf 'base64:%s\n' "$(openssl rand -base64 32)"
 ```
 
 4. Put that key in `.env` and start:
@@ -123,7 +123,7 @@ docker compose run --rm -e RUN_MIGRATIONS=false -e SEED_ON_BOOT=false app php ar
 docker compose up -d --build
 ```
 
-5. Route traffic to the `web` service port 80. Check readiness at `/health/ready`.
+5. Route traffic to the `web` service port 80. The production `web` container runs both Nginx and PHP-FPM locally, removing cross-container FastCGI DNS as a failure mode. Check readiness at `/health/ready`.
 
 ## GitHub + Coolify deployment
 

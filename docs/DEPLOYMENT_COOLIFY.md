@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.1
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.2
 
 The repository is deployment-ready as a Docker Compose application. Coolify should build the repository; do not upload `vendor/` or `node_modules/`.
 
@@ -9,7 +9,7 @@ Extract the final ZIP into an empty folder and push the source to a private GitH
 ```bash
 git init
 git add .
-git commit -m "SMVS Happy Family Portal v1.0.1"
+git commit -m "SMVS Happy Family Portal v1.0.2"
 git branch -M main
 git remote add origin <YOUR_PRIVATE_REPOSITORY>
 git push -u origin main
@@ -23,8 +23,7 @@ Create a new application from the GitHub repository and choose **Docker Compose*
 
 The services are:
 
-- `web` - Nginx, public HTTP service
-- `app` - Laravel PHP-FPM; migrations/seed bootstrap
+- `web` - public HTTP service containing both Nginx and Laravel PHP-FPM; migrations/seed bootstrap
 - `worker` - Redis queue worker
 - `scheduler` - Laravel scheduler; creates inactivity Reminder/Alert events
 - `db` - PostgreSQL 17
@@ -65,13 +64,13 @@ PILOT_PASSWORD=
 
 `REDIS_PASSWORD` may be left blank for an internal-only Redis service or set to a strong secret. The supplied Compose file propagates the value to Redis, enables `requirepass` when non-empty, and authenticates the Redis healthcheck and Laravel services consistently.
 
-Generate `APP_KEY` with a Laravel-capable environment, for example after image build:
+Generate `APP_KEY` before the first Compose deployment:
 
 ```bash
-docker compose run --rm -e RUN_MIGRATIONS=false -e SEED_ON_BOOT=false app php artisan key:generate --show
+printf 'base64:%s\n' "$(openssl rand -base64 32)"
 ```
 
-Copy the printed value into Coolify and redeploy.
+Copy the printed value into Coolify and redeploy. `APP_KEY`, `APP_URL`, and `DB_PASSWORD` are required by Compose so a missing critical value fails early instead of surfacing later as a 502.
 
 ## 4. Persistent storage
 
@@ -86,7 +85,7 @@ Never replace/delete these volumes during a normal application update.
 
 ## 5. First deployment behavior
 
-The `app` container waits for PostgreSQL, runs migrations, optionally runs the idempotent baseline seeder, creates the public storage link, then caches configuration/routes.
+The `web` container waits for PostgreSQL and Redis, runs migrations, optionally runs the idempotent baseline seeder, creates the public storage link, caches configuration/routes, validates Nginx/PHP-FPM, starts PHP-FPM on `127.0.0.1:9000`, and finally starts Nginx on port 80.
 
 With `SEED_ON_BOOT=true`, roles/permissions are synchronized and the bootstrap Super Admin is created only if the configured account does not already exist. Keep `PILOT_DATA=false` in production.
 
@@ -100,7 +99,7 @@ After deployment:
 4. Verify worker and scheduler containers remain running.
 5. Run the acceptance smoke checks in `FINAL_ACCEPTANCE_MATRIX.md` before importing real data.
 
-The Docker `web` healthcheck calls `/health/ready`, so a failed database/cache dependency makes the web container report unhealthy rather than falsely healthy.
+The Dockerfile and Compose `web` healthchecks both call `/health/ready`, so a failed database/cache dependency makes the web container report unhealthy rather than falsely healthy. Nginx talks to PHP-FPM over `127.0.0.1:9000` inside the same container, eliminating the earlier `web -> app:9000` FastCGI dependency.
 
 ## 7. Pilot/UAT data (staging only)
 
