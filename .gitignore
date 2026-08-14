@@ -1,0 +1,15 @@
+/.env
+/.env.*
+!/.env.example
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/storage/*.key
+/storage/app/private/*
+/storage/logs/*.log
+/database/database.sqlite
+.phpunit.result.cache
+.DS_Store
+.idea/
+.vscode/
