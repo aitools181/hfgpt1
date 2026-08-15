@@ -1,4 +1,4 @@
-# Final Acceptance Matrix - v1.0.2
+# Final Acceptance Matrix - v1.0.4
 
 This matrix maps the uploaded SRS page structure, integrated additions and wireframe support screens to implementation evidence and production acceptance checks.
 
@@ -27,6 +27,7 @@ This matrix maps the uploaded SRS page structure, integrated additions and wiref
 | 21 Bal Dashboard | Bal dashboard/analysis | Phase 5 tests | Verify assigned Bal scope and Center/Zone/Karyalay aggregates |
 | 22 Bal Entry/Completion | BalPravrutiService/completion controller | Phase 5 tests | Exactly 3 children + 1 Sanchalak; assigned Sanchalak submits completion |
 | 23 User & Role Management | users UI + editable permission matrix | PermissionMatrixTest | Create user, assign role/scope, update role permissions, verify effective access |
+| Password reset administration | dedicated reset permission/controller, session revocation, audit | UserPasswordResetTest + PermissionMatrixTest | Super Admin resets any account and is the only role that can grant/remove reset permission; delegated role resets only permitted equal/lower-scope users; old session is rejected; password never appears in audit |
 | 24 BN Karyalay Admin | role seed + female analysis locks | Phase 4/5 + permission tests | Verify permitted admin access and female-specific analysis; review DP-001 with SMVS |
 | 25 Settings / Master Data | SettingsController/UI | permission tests + syntax checks | Create Area/Society; verify Categories; edit role permissions |
 | Duplicate Family prevention | partial unique DB constraint + transaction guard | Phase 2 + ProductionHardeningTest | Concurrent/duplicate active Family assignment is rejected |
@@ -55,6 +56,10 @@ This matrix maps the uploaded SRS page structure, integrated additions and wiref
 | Backup/restore | scripts/backup.sh + scripts/restore.sh | shell/static review | Create backup, verify SHA256, restore in staging, recheck readiness and record counts |
 | CI/build | GitHub Actions | `.github/workflows/ci.yml` | CI must pass Composer validation/install, TypeScript, Vite, Laravel tests and image builds |
 | Coolify deployment | Docker Compose + runbook | compose structural validation | Persistent volumes survive redeploy; worker/scheduler healthy; HTTPS domain works |
+| Super Admin field preview | MyTargetController + My Target empty/admin-preview state | UiAccessRegressionTest | Super Admin opens My Target without 403 even when no approved Karyakar exists; selector works when Karyakars exist |
+| Super Admin Bal pages | qualified Bal analytics SQL + Bal controllers | UiAccessRegressionTest | Bal Dashboard and Bal Analysis open without 500 on PostgreSQL |
+| Sidebar navigation UX | AppLayout independent scroll + active route + scroll persistence | TypeScript syntax/manual | Sidebar and content scroll independently; clicked route stays highlighted; sidebar does not jump to top after navigation |
+| Feature schema repair | v1.0.3 repair migration + schema-aware readiness | migration/static + CI runtime | Upgrade deploy creates missing inactivity/Bal feature tables and `/health/ready` reports `schema=true` |
 
 ## Release gate
 

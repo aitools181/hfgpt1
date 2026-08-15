@@ -1,22 +1,129 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
 import AppLayout from '../../layouts/app-layout';
+import type { PageProps } from '../../types';
 
-export default function Users({users,roles,zones,centers,karyakars}:any){
- const f=useForm({name:'',email:'',password:'',status:'active',role_id:'',zone_id:'',center_id:'',karyakar_id:''});
- const role=roles.find((r:any)=>String(r.id)===String(f.data.role_id));
- const eligibleKaryakars=karyakars.filter((k:any)=>String(k.center_id)===String(f.data.center_id)&&(!k.user_id));
- return <AppLayout title="User & Role Management"><Head title="Users"/><div className="grid gap-5 xl:grid-cols-[420px_1fr]">
-  <form className="hf-card p-5 space-y-3" onSubmit={e=>{e.preventDefault();f.post('/admin/users',{onSuccess:()=>f.reset()})}}>
-   <h2 className="font-extrabold">Create User</h2>
-   <input className="hf-input" placeholder="Full name" value={f.data.name} onChange={e=>f.setData('name',e.target.value)}/>
-   <input className="hf-input" placeholder="Email" type="email" value={f.data.email} onChange={e=>f.setData('email',e.target.value)}/>
-   <input className="hf-input" placeholder="Temporary password (12+ chars)" type="password" value={f.data.password} onChange={e=>f.setData('password',e.target.value)}/>
-   <select className="hf-input" value={f.data.role_id} onChange={e=>{f.setData('role_id',e.target.value);f.setData('karyakar_id','')}}><option value="">Select role</option>{roles.map((r:any)=><option key={r.id} value={r.id}>{r.name}</option>)}</select>
-   <select className="hf-input" value={f.data.zone_id} onChange={e=>f.setData('zone_id',e.target.value)}><option value="">Zone (if applicable)</option>{zones.map((z:any)=><option key={z.id} value={z.id}>{z.name}</option>)}</select>
-   <select className="hf-input" value={f.data.center_id} onChange={e=>{f.setData('center_id',e.target.value);f.setData('karyakar_id','')}}><option value="">Center (if applicable)</option>{centers.map((c:any)=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}</select>
-   {['karyakar','sanchalak'].includes(role?.slug)&&<div><label className="hf-label">Link Approved Karyakar</label><select className="hf-input" value={f.data.karyakar_id} onChange={e=>f.setData('karyakar_id',e.target.value)}><option value="">Select Karyakar</option>{eligibleKaryakars.map((k:any)=><option key={k.id} value={k.id}>{k.karyakar_reference} - {k.full_name}</option>)}</select><p className="text-xs text-[#76647e] mt-1">Karyakar links enable own field assignments; Sanchalak links are required for Bal Pravruti Group assignment and completion reporting.</p></div>}
-   <button className="hf-btn">Create User</button>
-  </form>
-  <div className="hf-card p-5 overflow-x-auto"><table className="hf-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th><th>Status</th></tr></thead><tbody>{users.map((u:any)=>{const r=u.roles[0]; return <tr key={u.id}><td>{u.name}</td><td>{u.email}</td><td>{r?.name ?? '-'}</td><td>{r?.center_id ? `Center #${r.center_id}` : r?.zone_id ? `Zone #${r.zone_id}` : 'Organization'}</td><td><span className="hf-badge">{u.status}</span></td></tr>})}</tbody></table></div>
- </div></AppLayout>
+type Role = { id: number; name: string; slug: string; module: string };
+type UserRow = {
+    id: number;
+    name: string;
+    email: string;
+    status: string;
+    last_login_at: string | null;
+    password_changed_at: string | null;
+    can_reset_password: boolean;
+    can_manage: boolean;
+    roles: Array<{ id: number; name: string; slug: string; zone_id: number | null; center_id: number | null; is_primary: boolean }>;
+};
+
+type Props = {
+    users: UserRow[];
+    roles: Role[];
+    zones: Array<{ id: number; name: string; code: string }>;
+    centers: Array<{ id: number; zone_id: number; name: string; code: string }>;
+    karyakars: Array<{ id: number; center_id: number; user_id: number | null; full_name: string; karyakar_reference: string }>;
+    canManageUsers: boolean;
+    canResetPasswords: boolean;
+};
+
+export default function Users({ users, roles, zones, centers, karyakars, canManageUsers, canResetPasswords }: Props) {
+    const page = usePage<PageProps>();
+    const currentUserId = page.props.auth.user?.id;
+    const f = useForm({ name: '', email: '', password: '', status: 'active', role_id: '', zone_id: '', center_id: '', karyakar_id: '' });
+    const role = roles.find((r) => String(r.id) === String(f.data.role_id));
+    const eligibleKaryakars = karyakars.filter((k) => String(k.center_id) === String(f.data.center_id) && !k.user_id);
+
+    return <AppLayout title="User & Password Management">
+        <Head title="Users" />
+        <div className={`grid gap-5 ${canManageUsers ? 'xl:grid-cols-[420px_1fr]' : ''}`}>
+            {canManageUsers && <form className="hf-card p-5 space-y-3" onSubmit={(e) => { e.preventDefault(); f.post('/admin/users', { onSuccess: () => f.reset() }); }}>
+                <div>
+                    <h2 className="font-extrabold">Create User</h2>
+                    <p className="mt-1 text-xs text-[#76647e]">User creation remains controlled by the Manage Users permission and organizational scope.</p>
+                </div>
+                <input className="hf-input" placeholder="Full name" value={f.data.name} onChange={(e) => f.setData('name', e.target.value)} />
+                <input className="hf-input" placeholder="Email" type="email" value={f.data.email} onChange={(e) => f.setData('email', e.target.value)} />
+                <input className="hf-input" placeholder="Temporary password (12+ chars)" type="password" value={f.data.password} onChange={(e) => f.setData('password', e.target.value)} />
+                <select className="hf-input" value={f.data.role_id} onChange={(e) => { f.setData('role_id', e.target.value); f.setData('karyakar_id', ''); }}>
+                    <option value="">Select role</option>{roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+                <select className="hf-input" value={f.data.zone_id} onChange={(e) => f.setData('zone_id', e.target.value)}>
+                    <option value="">Zone (if applicable)</option>{zones.map((z) => <option key={z.id} value={z.id}>{z.code} - {z.name}</option>)}
+                </select>
+                <select className="hf-input" value={f.data.center_id} onChange={(e) => { f.setData('center_id', e.target.value); f.setData('karyakar_id', ''); }}>
+                    <option value="">Center (if applicable)</option>{centers.map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+                </select>
+                {['karyakar', 'sanchalak'].includes(role?.slug ?? '') && <div>
+                    <label className="hf-label">Link Approved Karyakar</label>
+                    <select className="hf-input" value={f.data.karyakar_id} onChange={(e) => f.setData('karyakar_id', e.target.value)}>
+                        <option value="">Select Karyakar</option>{eligibleKaryakars.map((k) => <option key={k.id} value={k.id}>{k.karyakar_reference} - {k.full_name}</option>)}
+                    </select>
+                    <p className="text-xs text-[#76647e] mt-1">Karyakar links enable own field assignments; Sanchalak links are required for Bal Pravruti Group assignment and completion reporting.</p>
+                </div>}
+                {Object.values(f.errors).length > 0 && <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{Object.values(f.errors)[0]}</div>}
+                <button className="hf-btn" disabled={f.processing}>Create User</button>
+            </form>}
+
+            <div className="hf-card p-5 overflow-x-auto">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 className="font-extrabold">Portal Users</h2>
+                        <p className="mt-1 text-xs text-[#76647e]">Only users inside your permitted organizational scope are listed.</p>
+                    </div>
+                    {canResetPasswords && <span className="hf-badge">Password reset enabled</span>}
+                </div>
+                <table className="hf-table">
+                    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th><th>Status</th><th>Last password reset</th>{canResetPasswords && <th>Security action</th>}</tr></thead>
+                    <tbody>{users.map((u) => {
+                        const r = u.roles.find((item) => item.is_primary) ?? u.roles[0];
+                        return <tr key={u.id}>
+                            <td><div className="font-semibold">{u.name}</div>{u.id === currentUserId && <div className="text-xs text-[#7b5f87]">Current account</div>}</td>
+                            <td>{u.email}</td>
+                            <td>{r?.name ?? '-'}</td>
+                            <td>{r?.center_id ? `Center #${r.center_id}` : r?.zone_id ? `Zone #${r.zone_id}` : 'Organization'}</td>
+                            <td><span className="hf-badge">{u.status}</span></td>
+                            <td>{u.password_changed_at ? new Date(u.password_changed_at).toLocaleString() : 'Not reset yet'}</td>
+                            {canResetPasswords && <td className="min-w-[290px]">
+                                {u.can_reset_password
+                                    ? <PasswordResetForm user={u} isSelf={u.id === currentUserId} />
+                                    : <span className="text-xs text-[#8a748f]">Protected / outside reset authority</span>}
+                            </td>}
+                        </tr>;
+                    })}</tbody>
+                </table>
+            </div>
+        </div>
+    </AppLayout>;
+}
+
+function PasswordResetForm({ user, isSelf }: { user: UserRow; isSelf: boolean }) {
+    const [open, setOpen] = useState(false);
+    const form = useForm({ password: '', password_confirmation: '', reason: '' });
+
+    if (!open) {
+        return <button type="button" className="hf-btn" onClick={() => setOpen(true)}>Reset password</button>;
+    }
+
+    return <form className="space-y-2 rounded-xl border border-[#eadff0] bg-[#fcf9fd] p-3" onSubmit={(e) => {
+        e.preventDefault();
+        form.put(`/admin/users/${user.id}/password`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                setOpen(false);
+            },
+        });
+    }}>
+        <div className="text-xs font-extrabold text-[#4d1a5d]">Reset {user.name}</div>
+        <input className="hf-input" type="password" autoComplete="new-password" placeholder="New password (12+ chars)" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
+        <input className="hf-input" type="password" autoComplete="new-password" placeholder="Confirm new password" value={form.data.password_confirmation} onChange={(e) => form.setData('password_confirmation', e.target.value)} />
+        <input className="hf-input" placeholder="Reason / note (optional)" value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} />
+        {form.errors.password && <div className="text-xs font-semibold text-red-700">{form.errors.password}</div>}
+        {form.errors.password_confirmation && <div className="text-xs font-semibold text-red-700">{form.errors.password_confirmation}</div>}
+        {isSelf && <div className="text-xs text-amber-700">Resetting your own password will sign you out immediately.</div>}
+        <div className="flex flex-wrap gap-2">
+            <button className="hf-btn" disabled={form.processing}>Confirm reset</button>
+            <button type="button" className="rounded-lg border border-[#d9c6df] px-3 py-2 text-xs font-semibold" onClick={() => { form.reset(); setOpen(false); }}>Cancel</button>
+        </div>
+    </form>;
 }

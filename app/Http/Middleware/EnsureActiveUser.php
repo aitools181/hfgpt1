@@ -13,13 +13,32 @@ class EnsureActiveUser
     {
         $user = $request->user();
         if ($user && $user->status !== 'active') {
-            Auth::guard('web')->logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
+            return $this->logout($request, 'This user account is not active.');
+        }
 
-            return redirect()->route('login')->with('error', 'This user account is not active.');
+        if ($user) {
+            $sessionVersion = $request->session()->get('auth_session_version');
+            if ($sessionVersion === null) {
+                // Transparently upgrade sessions created before session-version enforcement.
+                // If a password was reset after that legacy session was created, force re-login.
+                if ($user->password_changed_at !== null) {
+                    return $this->logout($request, 'Your password was changed. Please sign in again.');
+                }
+                $request->session()->put('auth_session_version', (int) $user->session_version);
+            } elseif ((int) $sessionVersion !== (int) $user->session_version) {
+                return $this->logout($request, 'Your session has expired. Please sign in again.');
+            }
         }
 
         return $next($request);
+    }
+
+    private function logout(Request $request, string $message): Response
+    {
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login')->with('error', $message);
     }
 }

@@ -29,6 +29,7 @@ class SettingsController extends Controller
             'roles' => $canManageRoles ? Role::query()->with('permissions:id,name,slug,module')->orderBy('name')->get() : [],
             'permissions' => $canManageRoles ? Permission::query()->orderBy('module')->orderBy('name')->get() : [],
             'canManageRoles' => $canManageRoles,
+            'canDelegatePasswordReset' => $canManageRoles && $user->hasRole('super_admin'),
             'centers' => Center::query()->whereIn('id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']),
             'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->with('center:id,name,code')->orderBy('center_id')->orderBy('name')->get(),
             'societies' => Society::query()->whereIn('center_id', $centerIds)->with(['center:id,name,code', 'area:id,name'])->orderBy('center_id')->orderBy('name')->get(),
@@ -41,6 +42,21 @@ class SettingsController extends Controller
         $data = $request->validate(['permission_ids' => ['array'], 'permission_ids.*' => ['integer', 'exists:permissions,id']]);
         $old = $role->permissions()->pluck('permissions.slug')->sort()->values()->all();
         $ids = collect($data['permission_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
+
+        // Password-reset delegation is intentionally Super-Admin-controlled even when
+        // manage_roles is delegated for other permission maintenance. This prevents a
+        // delegated role manager from granting itself account-takeover capability.
+        $resetPermission = Permission::query()->where('slug', 'reset_user_passwords')->first();
+        if ($resetPermission && ! $request->user()->hasRole('super_admin')) {
+            $hadResetPermission = in_array('reset_user_passwords', $old, true);
+            $requestsResetPermission = in_array((int) $resetPermission->id, $ids, true);
+            abort_unless(
+                $hadResetPermission === $requestsResetPermission,
+                403,
+                'Only Super Admin can grant or remove the Reset User Passwords permission.'
+            );
+        }
+
         $role->permissions()->sync($ids);
         $new = $role->permissions()->pluck('permissions.slug')->sort()->values()->all();
         $audit->record('roles', 'permissions_updated', Role::class, (string) $role->id, ['permissions' => $old], ['permissions' => $new]);

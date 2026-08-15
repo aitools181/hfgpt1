@@ -8,6 +8,7 @@ use App\Models\Karyakar;
 use App\Models\SankalpGroup;
 use App\Models\User;
 use App\Services\Monitoring\MonitoringAnalyticsService;
+use App\Services\UserAdministrationScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +16,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, MonitoringAnalyticsService $analytics): Response|RedirectResponse
+    public function __invoke(Request $request, MonitoringAnalyticsService $analytics, UserAdministrationScope $userScope): Response|RedirectResponse
     {
         $user = $request->user();
         if (($user->hasRole('nirdeshak') || $user->hasRole('nirikshak') || $user->hasRole('sanchalak'))
@@ -44,10 +45,17 @@ class DashboardController extends Controller
             ];
         }
 
+        $managedUserCount = null;
+        if ($user->hasPermission('manage_users')) {
+            $managedUserCount = $userScope->visibleUsers($user)->with('roles')->get()
+                ->filter(fn (User $candidate): bool => $userScope->canManageTarget($user, $candidate))
+                ->count();
+        }
+
         return Inertia::render('dashboard', [
             'summary' => [
                 ...$summary,
-                'users' => $user->hasPermission('manage_users') ? User::query()->count() : null,
+                'users' => $managedUserCount,
             ],
             'fieldSummary' => $fieldSummary,
             'monitoring' => [

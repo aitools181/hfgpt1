@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.2
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.4
 
 The repository is deployment-ready as a Docker Compose application. Coolify should build the repository; do not upload `vendor/` or `node_modules/`.
 
@@ -9,7 +9,7 @@ Extract the final ZIP into an empty folder and push the source to a private GitH
 ```bash
 git init
 git add .
-git commit -m "SMVS Happy Family Portal v1.0.2"
+git commit -m "SMVS Happy Family Portal v1.0.4"
 git branch -M main
 git remote add origin <YOUR_PRIVATE_REPOSITORY>
 git push -u origin main
@@ -169,3 +169,29 @@ For large Center imports, prefer CSV/TSV. The CSV/TSV reader is streaming and av
 ## 13. Production sign-off
 
 The exact release commit is production-ready only after GitHub CI and the target-environment acceptance gates in `FINAL_ACCEPTANCE_MATRIX.md` pass. The offline build environment used to assemble this package could not run Docker or install external Composer/NPM dependencies, so those runtime checks are deliberately delegated to CI/Coolify rather than falsely claimed as executed.
+
+
+## v1.0.4 upgrade note (password reset + RBAC hardening)
+
+Upgrade the existing Docker Compose resource in place; do not delete the PostgreSQL volume. The `web` bootstrap runs migrations and production-safe seeders automatically when `RUN_MIGRATIONS=true` / `SEED_ON_BOOT=true`.
+
+v1.0.4 adds `users.session_version`, `users.password_changed_at`, and the `reset_user_passwords` permission. The new permission is attached to Super Admin by default. Other roles receive it only when Super Admin explicitly checks **Reset User Passwords** under Settings -> Roles & Permission Matrix.
+
+After deployment:
+
+1. Confirm `/health/ready` returns `status=ready`, `checks.schema=true`, and empty `missing_columns`.
+2. Sign in as Super Admin -> Users -> reset a staging/test user's password.
+3. Confirm the old password no longer authenticates and any old session is rejected on the next request.
+4. Optionally grant `reset_user_passwords` to a test Center Admin and confirm it can reset a same-Center equal/lower role but cannot reset a Zonal/Super Admin or a user outside that Center.
+5. Review Activity/Audit Logs for `users / password_reset`; the audit must contain metadata only, never the new password.
+
+## v1.0.3 upgrade note (Super Admin / Bal / sidebar hotfix)
+
+When upgrading from v1.0.2 to v1.0.3, use the same Docker Compose resource and redeploy the new commit. The `web` bootstrap runs `php artisan migrate --force`; v1.0.3 includes a repair migration for missing `inactivity_events` and Bal Pravruti operational tables from early deployment candidates.
+
+After deployment verify:
+
+1. `https://YOUR_DOMAIN/health/ready` returns HTTP 200 with `database`, `cache`, and `schema` all `true` and an empty `missing_tables` array.
+2. Super Admin can open `/field/my-target` even when no approved Karyakar exists; an empty admin-preview state is expected until a Karyakar is approved.
+3. Super Admin can open `/field/reminders`, `/bal-pravruti`, and `/bal-pravruti/analysis` without HTTP 500.
+4. On desktop, the left navigation and right content pane scroll independently; the active navigation item remains highlighted and the sidebar retains its scroll position across navigation.

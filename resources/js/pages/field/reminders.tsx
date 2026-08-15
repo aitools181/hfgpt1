@@ -3,10 +3,11 @@ import { AlertTriangle, BellRing, Phone } from 'lucide-react';
 import AppLayout from '../../layouts/app-layout';
 
 type Event = { id:number; event_type:'reminder'|'alert'; inactivity_days:number; status:string; activity_anchor_at:string; triggered_at:string; resolved_at?:string|null; center:{name:string;code:string}; group:{group_code:string}; karyakar:{full_name:string;karyakar_reference:string;mobile?:string|null}; target?:{name?:string|null;target_quantity:number;completed_quantity:number;status:string}|null };
-type Props = { events:{data:Event[];links:{url?:string|null;label:string;active:boolean}[]}; filters:Record<string,string>; isOwnView:boolean };
+type Props = { events:{data:Event[];links:{url?:string|null;label:string;active:boolean}[]}; filters:Record<string,string>; isOwnView:boolean; systemWarning?:string|null };
 
-export default function Reminders({events,isOwnView}:Props) {
+export default function Reminders({events,isOwnView,systemWarning}:Props) {
     return <AppLayout title="Reminders & Alerts"><Head title="Reminders & Alerts"/>
+        {systemWarning && <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">{systemWarning}</div>}
         <section className="hf-card p-5 mb-5"><div className="flex items-start gap-3"><BellRing className="text-[#6a1b9a]"/><div><h2 className="font-extrabold">4-day Reminder / 7-day Alert history</h2><p className="mt-1 text-sm text-[#76647e]">{isOwnView?'Only your field inactivity records are shown.':'Records are restricted to your authorized organizational scope.'} A new Home Visit resolves open inactivity records for that Group/Karyakar.</p></div></div></section>
         <div className="space-y-3">
             {events.data.map(event => <article key={event.id} className={`hf-card p-4 border-l-4 ${event.event_type==='alert'?'!border-l-red-500':'!border-l-amber-500'}`}>

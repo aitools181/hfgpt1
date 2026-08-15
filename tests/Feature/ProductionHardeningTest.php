@@ -26,7 +26,7 @@ class ProductionHardeningTest extends TestCase
 
     public function test_readiness_endpoint_checks_database_and_cache(): void
     {
-        $this->getJson('/health/ready')->assertOk()->assertJson(['status' => 'ready', 'checks' => ['database' => true, 'cache' => true]]);
+        $this->getJson('/health/ready')->assertOk()->assertJson(['status' => 'ready', 'checks' => ['database' => true, 'cache' => true, 'schema' => true], 'missing_tables' => [], 'missing_columns' => []]);
     }
 
     public function test_database_constraint_is_last_line_of_defense_against_duplicate_active_family_assignment(): void

@@ -2,9 +2,10 @@ import { Head, Link } from '@inertiajs/react';
 import { BarChart3, ClipboardCheck, UsersRound } from 'lucide-react';
 import AppLayout from '../../layouts/app-layout';
 
-export default function BalDashboard({bal,canManage,canSubmit}:any){
+export default function BalDashboard({bal,canManage,canSubmit,systemWarning}:any){
  const s=bal.summary;
  return <AppLayout title="Bal Pravruti Dashboard"><Head title="Bal Pravruti Dashboard"/>
+  {systemWarning&&<div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">{systemWarning}</div>}
   <section className="hf-card mb-5 overflow-hidden"><div className="hf-brand p-5 text-white"><div className="text-xs font-bold uppercase tracking-[.16em] opacity-80">{bal.scopeLabel}</div><h2 className="mt-1 text-2xl font-black">Bal Pravruti - Happy Family</h2><p className="mt-1 text-sm opacity-85">Separate role-scoped dashboard for 3 children + 1 Sanchalak Groups and family completion reporting.</p></div>
    <div className="flex flex-wrap gap-2 p-4"><Link href="/bal-pravruti/groups" className="hf-btn hf-btn-secondary inline-flex items-center gap-2"><UsersRound size={17}/> Bal Groups</Link>{canSubmit&&<Link href="/bal-pravruti/completions" className="hf-btn inline-flex items-center gap-2"><ClipboardCheck size={17}/> Submit Completion</Link>}<Link href="/bal-pravruti/analysis" className="hf-btn hf-btn-secondary inline-flex items-center gap-2"><BarChart3 size={17}/> Analysis</Link></div>
   </section>

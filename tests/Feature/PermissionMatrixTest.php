@@ -30,4 +30,17 @@ class PermissionMatrixTest extends TestCase
         $this->assertFalse($slugs->contains('manage_inventory'));
         $this->assertFalse($slugs->contains('manage_support'));
     }
+
+
+    public function test_password_reset_permission_defaults_to_super_admin_and_is_delegatable(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $super = Role::query()->where('slug', 'super_admin')->with('permissions')->firstOrFail();
+        $bn = Role::query()->where('slug', 'bn_karyalay_admin')->with('permissions')->firstOrFail();
+        $center = Role::query()->where('slug', 'center_admin')->with('permissions')->firstOrFail();
+
+        $this->assertTrue($super->permissions->contains('slug', 'reset_user_passwords'));
+        $this->assertFalse($bn->permissions->contains('slug', 'reset_user_passwords'));
+        $this->assertFalse($center->permissions->contains('slug', 'reset_user_passwords'));
+    }
 }

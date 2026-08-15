@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: PHP syntax
+        run: find app bootstrap config database routes tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Static source integrity
+        run: python3 scripts/static_integrity_check.py
       - name: Validate Composer manifest
         run: composer validate --strict --no-check-lock
       - name: Install PHP dependencies

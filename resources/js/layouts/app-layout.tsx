@@ -1,13 +1,17 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Activity, BarChart3, BellRing, Building2, FileText, Home, LogOut, Settings, ShieldCheck, Users, MapPinned, Upload, UserRoundCheck, UsersRound, Network, Map, Target, Baby, ClipboardCheck, Megaphone, CalendarDays, Library, MessageSquareQuote, PackageOpen, StickyNote, LifeBuoy } from 'lucide-react';
+import { Activity, BarChart3, BellRing, Building2, FileText, Home, LogOut, Settings, ShieldCheck, Users, MapPinned, Upload, UserRoundCheck, UsersRound, Network, Map, Target, Baby, ClipboardCheck, Megaphone, CalendarDays, Library, MessageSquareQuote, PackageOpen, StickyNote, LifeBuoy, type LucideIcon } from 'lucide-react';
 import type { PageProps } from '../types';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
-const navigation = [
+const SIDEBAR_SCROLL_KEY = 'happy-family:desktop-sidebar-scroll';
+
+type NavItem = { label: string; href: string; icon: LucideIcon; permission?: string | null; permissionsAny?: string[]; roleSlugs?: string[] };
+
+const navigation: NavItem[] = [
     { label: 'Dashboard', href: '/', icon: Home, permission: null },
     { label: 'Zones', href: '/admin/zones', icon: MapPinned, permission: 'manage_zones' },
     { label: 'Centers', href: '/admin/centers', icon: Building2, permission: 'view_center' },
-    { label: 'Users', href: '/admin/users', icon: Users, permission: 'manage_users' },
+    { label: 'Users', href: '/admin/users', icon: Users, permissionsAny: ['manage_users', 'reset_user_passwords'] },
     { label: 'Families', href: '/registration/families', icon: UsersRound, permission: 'register_family' },
     { label: 'Karyakars', href: '/registration/karyakars', icon: UserRoundCheck, permission: 'register_karyakar' },
     { label: 'SMVS Import', href: '/registration/imports', icon: Upload, permission: 'register_family' },
@@ -15,7 +19,7 @@ const navigation = [
     { label: 'Area / Society', href: '/assignments/areas', icon: Map, permission: 'assign_area_society' },
     { label: 'Targets', href: '/assignments/targets', icon: Target, permission: 'assign_target' },
     { label: 'My Target', href: '/field/my-target', icon: Target, permission: 'mark_home_visit', roleSlugs: ['karyakar', 'super_admin'] },
-    { label: 'Reminders / Alerts', href: '/field/reminders', icon: BellRing, permission: 'view_own_assignments' },
+    { label: 'Reminders / Alerts', href: '/field/reminders', icon: BellRing, permission: 'view_own_assignments', roleSlugs: ['karyakar', 'super_admin', 'bn_karyalay_admin', 'zonal_admin', 'center_admin', 'computer_op'] },
     { label: 'Bal Dashboard', href: '/bal-pravruti', icon: Baby, permission: 'access_bal_pravruti' },
     { label: 'Bal Groups', href: '/bal-pravruti/groups', icon: UsersRound, permission: 'access_bal_pravruti' },
     { label: 'Bal Completion', href: '/bal-pravruti/completions', icon: ClipboardCheck, permission: 'submit_bal_completion', roleSlugs: ['sanchalak'] },
@@ -35,35 +39,90 @@ const navigation = [
 ];
 
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
-    const { auth, flash } = usePage<PageProps>().props;
+    const page = usePage<PageProps>();
+    const { auth, flash } = page.props;
     const user = auth.user!;
     const role = user.roles.find((item) => item.is_primary) ?? user.roles[0];
     const isSuperAdmin = user.roles.some((assigned) => assigned.slug === 'super_admin');
     const allowed = (permission: string | null) => !permission || user.permissions.includes(permission) || isSuperAdmin;
-    const visible = (item: typeof navigation[number]) => allowed(item.permission) && (!('roleSlugs' in item) || !item.roleSlugs || item.roleSlugs.some((slug) => user.roles.some((assigned) => assigned.slug === slug)));
+    const visible = (item: NavItem) => {
+        const permissionAllowed = item.permissionsAny?.length
+            ? item.permissionsAny.some((permission) => allowed(permission))
+            : allowed(item.permission ?? null);
+        const roleAllowed = !item.roleSlugs?.length || item.roleSlugs.some((slug) => user.roles.some((assigned) => assigned.slug === slug));
+        return permissionAllowed && roleAllowed;
+    };
+    const currentPath = page.url.split('?')[0].replace(/\/$/, '') || '/';
+    const visibleNavigation = navigation.filter(visible);
+    const matchesPath = (href: string) => {
+        const normalizedHref = href.replace(/\/$/, '') || '/';
+        if (normalizedHref === '/') return currentPath === '/';
+        return currentPath === normalizedHref || currentPath.startsWith(`${normalizedHref}/`);
+    };
+    const activeHref = visibleNavigation
+        .filter((item) => matchesPath(item.href))
+        .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+    const isActive = (href: string) => href === activeHref;
+
+    const sidebarRef = useRef<HTMLElement | null>(null);
+    useLayoutEffect(() => {
+        const sidebar = sidebarRef.current;
+        if (!sidebar) return;
+        try {
+            const stored = Number(window.sessionStorage.getItem(SIDEBAR_SCROLL_KEY) ?? '0');
+            if (Number.isFinite(stored) && stored > 0) {
+                window.requestAnimationFrame(() => {
+                    sidebar.scrollTop = stored;
+                });
+            }
+        } catch {
+            // Storage can be unavailable in hardened/private browser contexts; scrolling still works.
+        }
+    }, []);
+
+    const rememberSidebarScroll = () => {
+        const sidebar = sidebarRef.current;
+        if (!sidebar) return;
+        try {
+            window.sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(sidebar.scrollTop));
+        } catch {
+            // Keep navigation functional even when sessionStorage is unavailable.
+        }
+    };
 
     return (
-        <div className="hf-shell lg:grid lg:grid-cols-[260px_1fr]">
-            <aside className="hf-sidebar hf-desktop-sidebar min-h-screen p-5">
+        <div className="hf-shell lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:items-start lg:overflow-hidden">
+            <aside
+                ref={sidebarRef}
+                onScroll={rememberSidebarScroll}
+                className="hf-sidebar hf-desktop-sidebar min-h-screen p-5 lg:sticky lg:top-0 lg:h-screen lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
+            >
                 <div className="hf-brand rounded-2xl p-4 mb-6">
                     <div className="text-xs uppercase tracking-[.18em] opacity-80">SMVS</div>
                     <div className="text-xl font-extrabold mt-1">Happy Family</div>
                     <div className="text-xs mt-1 opacity-80">Stronger Families, Stronger Society</div>
                 </div>
                 <nav className="space-y-1">
-                    {navigation.filter(visible).map((item) => {
+                    {visibleNavigation.map((item) => {
                         const Icon = item.icon;
-                        return <Link key={item.href} href={item.href} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm hover:bg-white/10"><Icon size={18}/>{item.label}</Link>;
+                        const active = isActive(item.href);
+                        return <Link
+                            key={item.href}
+                            href={item.href}
+                            onBefore={rememberSidebarScroll}
+                            aria-current={active ? 'page' : undefined}
+                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? 'bg-white/18 font-extrabold text-white shadow-sm ring-1 ring-white/15' : 'text-white/95 hover:bg-white/10'}`}
+                        ><Icon size={18}/>{item.label}</Link>;
                     })}
                 </nav>
-                <div className="mt-8 border-t border-white/15 pt-4 text-xs opacity-85">
+                <div className="mt-8 border-t border-white/15 pt-4 pb-2 text-xs opacity-85">
                     <div className="font-semibold">{user.name}</div>
                     <div className="mt-1">{role?.name ?? 'User'}</div>
                     <Link href="/logout" method="post" as="button" className="mt-4 flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2"><LogOut size={15}/> Logout</Link>
                 </div>
             </aside>
 
-            <main className="min-w-0">
+            <main className="min-w-0 lg:h-screen lg:overflow-y-auto lg:overscroll-contain">
                 <header className="border-b border-[#eadff0] bg-white/90 px-4 py-4 backdrop-blur md:px-8 flex items-center justify-between gap-4">
                     <div>
                         <div className="text-xs font-semibold text-[#7b5f87]">SMVS Happy Family Portal</div>
@@ -74,7 +133,10 @@ export default function AppLayout({ title, children }: { title: string; children
 
                 <div className="p-4 md:p-8">
                     <div className="mb-4 flex flex-wrap gap-2 lg:hidden">
-                        {navigation.filter(visible).map((item) => <Link key={item.href} href={item.href} className="hf-badge">{item.label}</Link>)}
+                        {visibleNavigation.map((item) => {
+                            const active = isActive(item.href);
+                            return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`hf-badge ${active ? '!bg-[#6a1b9a] !text-white' : ''}`}>{item.label}</Link>;
+                        })}
                     </div>
                     {flash.success && <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{flash.success}</div>}
                     {flash.error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{flash.error}</div>}

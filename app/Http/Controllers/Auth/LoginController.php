@@ -47,6 +47,7 @@ class LoginController extends Controller
 
         RateLimiter::clear($key);
         $request->session()->regenerate();
+        $request->session()->put('auth_session_version', (int) $request->user()->session_version);
         $request->user()->forceFill(['last_login_at' => now()])->saveQuietly();
         $auditTrail->record('authentication', 'login', 'user', (string) $request->user()->id);
 

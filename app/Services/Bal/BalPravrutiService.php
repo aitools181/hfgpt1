@@ -211,7 +211,7 @@ class BalPravrutiService
         abort_unless($group->status === 'active', 422, 'Completion can only be submitted for an active Bal Pravruti Group.');
         abort_unless((int) $data['families_completed'] <= (int) $data['families_visited'], 422, 'Families completed cannot exceed families visited.');
 
-        $this->assertAreaSocietyCenter($group->center_id, null, $data['society_id'] ?? null);
+        $this->assertAreaSocietyCenter($group->center_id, $group->sampark_area_id, $data['society_id'] ?? null);
         if (! empty($data['family_id'])) {
             $family = Family::query()->findOrFail($data['family_id']);
             abort_unless((int) $family->center_id === (int) $group->center_id, 422, 'Selected Family must belong to the Bal Group Center.');
@@ -378,7 +378,7 @@ class BalPravrutiService
 
     private function childGenderDistribution(Collection $groupIds): array
     {
-        $rows = BalGroupChild::query()->whereIn('bal_group_id', $groupIds)->where('status', 'active')
+        $rows = BalGroupChild::query()->whereIn('bal_group_id', $groupIds)->where('bal_group_children.status', 'active')
             ->join('family_members', 'family_members.id', '=', 'bal_group_children.family_member_id')
             ->selectRaw('family_members.gender as gender, COUNT(*) as total')->groupBy('family_members.gender')->pluck('total', 'gender');
         return [

@@ -11,11 +11,11 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'status', 'email_verified_at', 'last_login_at'];
+    protected $fillable = ['name', 'email', 'password', 'status', 'email_verified_at', 'last_login_at', 'password_changed_at'];
     protected $hidden = ['password', 'remember_token'];
     protected function casts(): array
     {
-        return ['email_verified_at' => 'datetime', 'last_login_at' => 'datetime', 'password' => 'hashed'];
+        return ['email_verified_at' => 'datetime', 'last_login_at' => 'datetime', 'password_changed_at' => 'datetime', 'session_version' => 'integer', 'password' => 'hashed'];
     }
 
     public function roles(): BelongsToMany

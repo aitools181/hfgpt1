@@ -52,9 +52,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/admin/centers', [CenterController::class, 'store'])->middleware('permission:manage_centers')->name('centers.store');
     Route::put('/admin/centers/{center}', [CenterController::class, 'update'])->middleware(['permission:manage_centers', 'scope'])->name('centers.update');
 
-    Route::get('/admin/users', [UserController::class, 'index'])->middleware('permission:manage_users')->name('users.index');
+    Route::get('/admin/users', [UserController::class, 'index'])->middleware('permission:manage_users,reset_user_passwords')->name('users.index');
     Route::post('/admin/users', [UserController::class, 'store'])->middleware('permission:manage_users')->name('users.store');
     Route::put('/admin/users/{user}', [UserController::class, 'update'])->middleware('permission:manage_users')->name('users.update');
+    Route::put('/admin/users/{user}/password', [UserController::class, 'resetPassword'])->middleware('permission:reset_user_passwords')->name('users.password.reset');
 
     Route::get('/admin/audit-logs', AuditLogController::class)->middleware('permission:view_audit_logs')->name('audit-logs.index');
     Route::get('/admin/settings', SettingsController::class)->middleware('permission:manage_master_data')->name('settings.index');
