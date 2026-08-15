@@ -26,6 +26,10 @@ a { color: inherit; text-decoration: none; }
 .hf-table td { padding: .75rem; border-bottom: 1px solid #f1e9f4; vertical-align: top; }
 .hf-error { color: #b42318; font-size: .78rem; margin-top: .3rem; }
 
-@media (max-width: 900px) {
+@media (min-width: 1024px) {
+    .hf-sidebar { scrollbar-gutter: stable; }
+}
+
+@media (max-width: 1023px) {
     .hf-desktop-sidebar { display: none; }
 }

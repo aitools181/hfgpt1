@@ -2,7 +2,7 @@
 
 Production-oriented cumulative source package implementing the uploaded **SMVS Happy Family Project SRS Version 3.0** and **Full Portal Wireframe Version 2.0**.
 
-Current release: **1.0.2 - Coolify Deployment Hotfix (Phases 0-7 + stabilization)**
+Current release: **1.0.4 - Password Reset RBAC + Full Re-test Hardening (Phases 0-7 + stabilization)**
 
 ## What is included
 
@@ -11,6 +11,7 @@ Current release: **1.0.2 - Coolify Deployment Hotfix (Phases 0-7 + stabilization
 - authenticated role-based portal with login throttling
 - Karyalay/Super Admin, BN Karyalay Admin, Zonal Admin, Center Admin, Computer Op., Karyakar, Nirdeshak, Nirikshak and Sanchalak
 - Zone/Center scoped access and editable role-permission matrix
+- Super Admin password reset plus delegatable `reset_user_passwords` permission with scope/hierarchy enforcement and session revocation
 - Center, Area, Society and Category master data
 - Activity/Audit Log with old/new values and reason where applicable
 
@@ -190,4 +191,4 @@ Start with:
 
 ## Build-environment note
 
-The offline environment used to assemble and audit this release did not provide a Composer binary, Docker CLI or external dependency-network access. The source was re-audited with PHP syntax checks, route/permission/static checks, TypeScript syntax/semantic checks using local ambient stubs, manifest/config parsing, pure-PHP domain checks and release-integrity verification. Real dependency installation, Laravel/PostgreSQL runtime tests, the actual Vite production build and Docker image/runtime validation remain configured in GitHub CI and must be green before production sign-off. See `docs/FULL_CODE_AUDIT.md`.
+The offline environment used to assemble and audit this release did not provide a Composer binary, Docker CLI or external dependency-network access. The source was re-audited with PHP syntax checks, route/permission/static checks, TypeScript/TSX parser/transpile checks using the locally available TypeScript compiler with `--noCheck`, manifest/config parsing, pure-PHP domain checks and release-integrity verification. Real dependency installation, Laravel/PostgreSQL runtime tests, the actual Vite production build and Docker image/runtime validation remain configured in GitHub CI and must be green before production sign-off. See `docs/FULL_CODE_AUDIT.md`.

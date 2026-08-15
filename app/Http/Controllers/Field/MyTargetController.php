@@ -32,7 +32,27 @@ class MyTargetController extends Controller
             }
         }
 
-        abort_unless($karyakar, 403, 'This portal user is not linked to an approved Sankalp Karyakar.');
+        if (! $karyakar) {
+            abort_unless($user->hasRole('super_admin'), 403, 'This portal user is not linked to an approved Sankalp Karyakar.');
+
+            return Inertia::render('field/my-target', [
+                'karyakar' => null,
+                'groups' => [],
+                'targets' => [],
+                'badgeSummary' => [
+                    'completedFamilies' => 0,
+                    'currentMilestone' => null,
+                    'nextMilestone' => 3,
+                    'remainingToNext' => 3,
+                    'earned' => [],
+                ],
+                'openEvents' => [],
+                'adminChoices' => $adminChoices,
+                'isAdminPreview' => true,
+                'isSuperAdmin' => true,
+            ]);
+        }
+
         abort_unless($user->canAccessCenterId($karyakar->center_id), 403);
 
         $groups = SankalpGroup::query()
@@ -85,6 +105,7 @@ class MyTargetController extends Controller
             'openEvents' => $openEvents,
             'adminChoices' => $adminChoices,
             'isAdminPreview' => $user->hasRole('super_admin') && $karyakar->user_id !== $user->id,
+            'isSuperAdmin' => $user->hasRole('super_admin'),
         ]);
     }
 }

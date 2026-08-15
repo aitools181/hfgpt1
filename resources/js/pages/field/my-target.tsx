@@ -17,18 +17,19 @@ type AdminChoice = { id:number; center_id:number; full_name:string; karyakar_ref
 type CompletionReport = { zone?:string|null; center?:string|null; group:string; karyakar:string; completedFamilies:number; messagesDelivered:number; groupCompleted:number; groupPending:number; ownGroupCompleted:number; targetName:string; targetQuantity:number; targetCompleted:number; targetPending:number; completionRatio:number; analysis:string };
 
 type Props = {
-    karyakar: Karyakar;
+    karyakar: Karyakar | null;
     groups: Group[];
     targets: TargetRow[];
     badgeSummary: BadgeSummary;
     openEvents: EventRow[];
     adminChoices: AdminChoice[];
     isAdminPreview: boolean;
+    isSuperAdmin: boolean;
 };
 
 const pct = (value:number) => `${Math.max(0, Math.min(100, value))}%`;
 
-export default function MyTarget({ karyakar, groups, targets, badgeSummary, openEvents, adminChoices, isAdminPreview }: Props) {
+export default function MyTarget({ karyakar, groups, targets, badgeSummary, openEvents, adminChoices, isAdminPreview, isSuperAdmin }: Props) {
     const page = usePage<PageProps>();
     const flashReport = page.props.flash.completionReport as CompletionReport | null | undefined;
     const [report, setReport] = useState<CompletionReport | null>(flashReport ?? null);
@@ -36,17 +37,31 @@ export default function MyTarget({ karyakar, groups, targets, badgeSummary, open
         const map = new Map<number, TargetRow>();
         for (const target of targets) {
             const previous = map.get(target.group_id);
-            if (!previous || (target.karyakar_id === karyakar.id && previous.karyakar_id !== karyakar.id)) map.set(target.group_id, target);
+            if (!previous || (karyakar && target.karyakar_id === karyakar.id && previous.karyakar_id !== karyakar.id)) map.set(target.group_id, target);
         }
         return map;
-    }, [targets, karyakar.id]);
+    }, [targets, karyakar?.id]);
 
     const totalAssigned = groups.reduce((sum, group) => sum + group.family_assignments.length, 0);
     const totalCompleted = groups.reduce((sum, group) => sum + group.family_assignments.filter(item => item.home_visit).length, 0);
     const overall = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
 
+    if (!karyakar) {
+        return <AppLayout title="My Target / Home Visit"><Head title="My Target" />
+            <section className="hf-card p-5 mb-5">
+                <div className="font-extrabold">Super Admin field preview</div>
+                <p className="mt-1 text-sm text-[#76647e]">Select an approved Sankalp Karyakar to preview My Target, Home Visit progress, badges and reminders.</p>
+                {adminChoices.length > 0 ? <select className="hf-input mt-4 max-w-xl" defaultValue="" onChange={e => { if (e.target.value) router.get('/field/my-target', { karyakar_id: e.target.value }, { preserveState:false }); }}>
+                    <option value="" disabled>Select approved Karyakar</option>
+                    {adminChoices.map(choice => <option key={choice.id} value={choice.id}>{choice.karyakar_reference} - {choice.full_name}</option>)}
+                </select> : <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No approved Sankalp Karyakar is available yet. Super Admin access is working; approve or link a Karyakar before using the field preview.</div>}
+            </section>
+            <section className="hf-card p-10 text-center"><UsersRound className="mx-auto text-[#8d6b99]"/><h2 className="mt-3 text-lg font-extrabold">No Karyakar selected</h2><p className="mt-1 text-sm text-[#76647e]">This page no longer returns 403 for Super Admin when no approved Karyakar is linked or available.</p></section>
+        </AppLayout>;
+    }
+
     return <AppLayout title="My Target / Home Visit"><Head title="My Target" />
-        {adminChoices.length > 0 && <section className="hf-card p-4 mb-4">
+        {isSuperAdmin && adminChoices.length > 0 && <section className="hf-card p-4 mb-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div><div className="font-extrabold">Super Admin field preview</div><div className="text-sm text-[#76647e]">Preview an approved Karyakar's mobile field view. Override completion still requires a reason.</div></div>
                 <select className="hf-input sm:max-w-sm" value={karyakar.id} onChange={e => router.get('/field/my-target', { karyakar_id: e.target.value }, { preserveState:false })}>

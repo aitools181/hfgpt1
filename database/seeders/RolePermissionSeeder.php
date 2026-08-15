@@ -19,6 +19,7 @@ class RolePermissionSeeder extends Seeder
                 ['manage_zones', 'Manage Zones', 'master'],
                 ['manage_centers', 'Manage Centers', 'master'],
                 ['manage_users', 'Manage Users', 'security'],
+                ['reset_user_passwords', 'Reset User Passwords', 'security'],
                 ['manage_roles', 'Manage Roles and Permissions', 'security'],
                 ['view_audit_logs', 'View Activity / Audit Logs', 'audit'],
                 ['manage_master_data', 'Manage Settings / Master Data', 'master'],
@@ -94,7 +95,7 @@ class RolePermissionSeeder extends Seeder
 
             $matrix = [
                 'super_admin' => $permissionModels->keys()->all(),
-                'bn_karyalay_admin' => $permissionModels->keys()->all(),
+                'bn_karyalay_admin' => $permissionModels->keys()->reject(fn (string $slug): bool => $slug === 'reset_user_passwords')->all(),
                 'zonal_admin' => array_merge(['view_zone', 'view_center', 'register_family', 'register_karyakar', 'approve_karyakar', 'create_group', 'manage_fixed_families', 'assign_transfer_families', 'assign_area_society', 'assign_target', 'view_own_assignments', 'view_reports_analysis', 'view_audit_logs', 'gender_category_filters', 'access_bal_pravruti', 'manage_bal_groups', 'view_bal_analysis', 'manage_family_time', 'view_inventory', 'manage_inventory', 'manage_support', 'manage_correction_requests'], $commonSupport),
                 'center_admin' => array_merge(['view_center', 'register_family', 'register_karyakar', 'approve_karyakar', 'create_group', 'manage_fixed_families', 'assign_transfer_families', 'assign_area_society', 'assign_target', 'view_own_assignments', 'view_reports_analysis', 'view_audit_logs', 'gender_category_filters', 'access_bal_pravruti', 'manage_bal_groups', 'view_bal_analysis', 'manage_family_time', 'view_inventory', 'manage_inventory', 'manage_support', 'manage_correction_requests'], $commonSupport),
                 'computer_op' => array_merge(['view_center', 'register_family', 'register_karyakar', 'create_group', 'manage_fixed_families', 'assign_transfer_families', 'assign_area_society', 'assign_target', 'view_own_assignments', 'view_reports_analysis', 'view_audit_logs', 'gender_category_filters', 'view_inventory', 'manage_inventory'], $commonSupport),

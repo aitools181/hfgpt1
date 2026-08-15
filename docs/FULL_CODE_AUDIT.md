@@ -1,124 +1,138 @@
-# Full Code Audit - SMVS Happy Family Portal v1.0.2
+# Full Code Audit - SMVS Happy Family Portal v1.0.4
 
-Audit date: 2026-08-14
+Audit date: 2026-08-15
 
-## 1. Scope and source baseline
+## 1. Audit scope
 
-This audit reviewed the cumulative Phase 0-7 source tree against the uploaded SMVS Happy Family Project SRS Version 3.0 (including its integrated additions) and Full Portal Wireframe Version 2.0. The review covered application code, authorization/scope rules, database constraints, imports, Group/Family business rules, field execution, reporting, Bal Pravruti, support modules, Docker/Coolify packaging, backup/restore, CI configuration and release contents.
+This pass re-reviewed the cumulative Phase 0-7 project after the v1.0.3 production hotfix. The review covered authentication, RBAC, delegated permissions, user administration, password security, organizational scope isolation, registration/imports, Group/Family/Target invariants, field execution, reporting/analysis, Bal Pravruti, support modules, audit logging, migrations, readiness checks, Docker/Coolify packaging, CI and release contents.
 
-This report distinguishes between checks that were actually executable in the build environment and runtime checks that require the project dependencies/Docker engine.
+The uploaded SRS Version 3.0 and Full Portal Wireframe Version 2.0 remain the product baseline. The password-reset capability in v1.0.4 is an explicit user-requested administrative addition rather than a silently inferred SRS requirement.
 
-## 2. Defects corrected during the audited-final pass
+## 2. v1.0.4 defects/risk paths found and corrected
 
-### Security, authorization and data isolation
+### Delegated role-manager reset escalation
 
-- Fixed a same-Zone cross-Center scope leak: only the actual `zonal_admin` role now grants Zone-wide Center access; a Center-role `zone_id` is context only.
-- Enforced inactive-account logout/denial on every authenticated route through `EnsureActiveUser`.
-- Hardened global/null-Center visibility for Support Requests, Family Time, Announcements, Shared Content, Testimonials and Correction Requests.
-- Restricted organization-wide content/announcement/testimonial administration to Karyalay-level roles rather than allowing a Center-scoped manager to create global records.
-- Hardened multi-role/primary-role scope handling and stale Karyakar-user links when a portal user changes away from a field role.
-- Canonicalized login/admin emails to lowercase and added a PostgreSQL `LOWER(email)` unique index.
+A role holding `manage_roles` could previously submit the Reset User Passwords permission in the role matrix. v1.0.4 now reserves grant/removal of `reset_user_passwords` to Super Admin, while other delegated role managers may continue maintaining non-reset permissions.
 
-### SRS coverage gaps corrected
+### Concurrent password-reset session version race
 
-- Added the required Correction/Change Request workflow with scoped submission, review status and mandatory review note for final decisions.
-- Added authorized Sankalp Family and Family Member editing with a mandatory change reason and explicit audit entries.
-- Blocked unsafe direct Age/Gender changes for a Family Member already linked to a Karyakar; such changes must use the Correction Request flow so Category/Group impact can be reviewed.
+The initial reset implementation calculated `session_version` before acquiring a database row lock. Two simultaneous resets could therefore calculate the same next version. The final v1.0.4 implementation locks the target user row, re-checks reset authority inside the transaction, validates password reuse against the locked record, and increments the current version atomically.
 
-### Group, Family and assignment integrity
+### Password reset / credential security
 
-- Split Fixed/Locked management permission from general Family assignment/transfer permission.
-- Blocked Group activation while Remaining Family reports are still pending.
-- Required currently Approved Karyakars during Group activation and Remaining-Family actions.
-- Prevented nomination from an inactive Family or inactive Family Member.
-- Enforced one Head member for manual Family registration; import rows marking a new Head demote prior Heads in that Family.
-- Enforced Society -> Area -> Center consistency and normalized Center/Zone/Area/Society codes/names where needed.
-- Preserved database-level one-active-Group-per-Family protection and transaction row locks.
-- Closed/audited open source-Group targets when a Family transfer makes an active source Group draft, preventing orphaned active targets.
+- Added a dedicated `reset_user_passwords` permission instead of treating password changes as part of generic `manage_users`.
+- Super Admin receives the reset permission by default. No other role receives it automatically; Super Admin can delegate/revoke it from the Settings permission matrix.
+- Added a dedicated password-reset endpoint and prohibited password fields on the generic User update endpoint, closing a permission-bypass path.
+- Added password confirmation, minimum-length validation, same-password rejection, optional reset reason and redacted audit logging.
+- Added `session_version` and `password_changed_at` to users. Resetting a password increments the session version, rotates the remember token, and invalidates stale authenticated sessions.
+- Self-reset by Super Admin signs the current session out immediately.
+- Login now renders flash success/error messages so password-reset and forced-session-expiry messages are visible.
 
-### Target and Home Visit consistency
+### Delegated RBAC / scope hardening
 
-- Rejected Target creation for draft/incomplete Groups.
-- Required Target Area/Society to match the active Group operational Area/Society.
-- Synchronized current operational Target location when an authorized Group Area/Society change occurs, while preserving expired historical targets.
-- Corrected Home Visit Area/Society fallback order and Target matching.
-- Capped `completed_quantity` at `target_quantity` and kept completion status/percentage consistent.
+During the re-test, a broader pre-existing risk was identified: if `manage_users` were manually delegated to a Center/Zone role, the old User controller accepted any role/scope supplied by the form. That could have allowed privilege escalation or cross-scope account creation. v1.0.4 fixes this by introducing `UserAdministrationScope`.
 
-### Imports and large-data handling
+- Delegated user administration is limited to the actor's organizational scope.
+- A delegated administrator cannot assign a role above their own authority level.
+- Organization-wide roles cannot be assigned by Center-scoped administrators.
+- Zonal roles require actual Zone authority; contextual `zone_id` carried by Center roles does not become Zone-wide authority.
+- A delegated password reset can target only equal/lower-authority users whose complete role assignment is inside the actor's scope.
+- Reset-only users see only accounts they are actually authorized to reset, avoiding unnecessary disclosure of higher-authority accounts.
+- Dashboard User counts now use the same user-administration scope instead of revealing an organization-wide count to a delegated `manage_users` role.
 
-- Fixed private import disk/path mismatch and added persistent `app_private` storage.
-- Moved import execution from the web request to a dedicated Redis `imports` queue job; the worker has a 900-second timeout and matching retry window.
-- Added the private import volume to the worker so queued jobs can read uploaded source files.
-- Preserved original Family `registered_at`/`registered_by` provenance on subsequent SMVS Global refresh imports instead of rewriting the original registration history.
-- Made Area/Society import row handling transactional and normalized optional external codes to `NULL` rather than empty-string collisions.
-- Fixed PHP 8.4 CSV deprecation behavior by supplying explicit CSV escape parameters.
+### Deployment/readiness hardening
 
-### Bal Pravruti integrity
+- `/health/ready` now checks `users.session_version` and `users.password_changed_at` in addition to required tables, so an incomplete v1.0.4 migration cannot appear schema-ready.
+- Added `scripts/static_integrity_check.py` and wired it into local release checks and GitHub CI.
+- Static integrity checks verify Inertia page references, route/controller methods, route-name uniqueness, permission definitions, sidebar GET routes, password-reset invariants, merge markers and debug leftovers.
 
-- Required active child Families and active child Family Members.
-- Required the linked Sanchalak portal user and Karyakar to be active/Approved and correctly scoped.
-- Enforced Bal Society/Area/Center consistency and Supervisor scope.
+## 3. Password reset authorization model
 
-### Docker, Redis and production bootstrap
+Default behavior:
 
-- Fixed fresh-database startup so the app retries `migrate --force` directly instead of deadlocking on a pre-migration status check.
-- Fixed Redis password propagation, optional `requirepass` command construction and authenticated healthcheck behavior.
-- Added persistent private import storage to Compose and backup/restore.
-- Hardened first-bootstrap credentials: no default database/admin password is shipped; a new Super Admin requires a non-default password of at least 16 characters; pilot data requires a 16+ character staging password.
-- Corrected APP_KEY generation instructions so the helper container does not try migrations/seeding before a key exists.
-- Included both Unit and Feature suites in `phpunit.xml`.
+| Actor | Default reset permission | Reset authority |
+|---|---:|---|
+| Super Admin / Karyalay Admin | Yes | Any portal account, including own account |
+| BN Karyalay Admin | No | Can be explicitly granted; then organization scope excluding Super Admin/higher authority |
+| Zonal Admin | No | Can be explicitly granted; then equal/lower users wholly inside assigned Zone |
+| Center Admin | No | Can be explicitly granted; then equal/lower users wholly inside assigned Center |
+| Computer Op. | No | Can be explicitly granted; then equal/lower users wholly inside assigned Center |
+| Nirdeshak / Nirikshak / Sanchalak / Karyakar | No | Can be explicitly granted; still limited by role rank and scope |
 
-## 3. Regression coverage added/strengthened
+Password values are never written to Activity/Audit Logs. Existing sessions are invalidated after reset.
 
-The source now contains 79 named PHPUnit test methods across Unit and Feature suites. Audit regression cases include scope isolation, null-Center privacy, permission preservation, email canonicalization, inactive sessions, Family editing, correction requests, Group activation guards, Karyakar eligibility, Bal child eligibility, import rollback/private storage, import provenance preservation, Group/Target location synchronization, Family transfer target closure and other audited invariants.
+## 4. Automated regression source now present
 
-## 4. Checks actually executed in this build environment
+The source contains **95 named PHPUnit test methods** across Unit and Feature suites. v1.0.4 adds/extends tests for:
+
+- Super Admin resetting another user's password.
+- Super Admin resetting own password and being signed out.
+- role without reset permission being denied.
+- Super Admin granting reset permission through the role-permission matrix.
+- non-Super role managers being unable to grant/remove `reset_user_passwords`.
+- Center-scoped delegated reset of an eligible target.
+- cross-Center reset denial.
+- denial against Super Admin / higher-scope targets.
+- reset-only user-list privacy.
+- generic User update being unable to smuggle a password change.
+- stale authenticated session rejection after password reset.
+- delegated `manage_users` privilege-escalation and cross-Center creation denial.
+- Super Admin-only default password-reset permission baseline.
+- readiness schema including the password-security columns.
+
+The existing suites continue to cover authentication, scope isolation, Family/Karyakar registration, import behavior, 2-Karyakar/10-Family Group rules, Fixed/Remaining composition, duplicate prevention/transfers, Targets, Home Visits, reminders, reports, Bal Pravruti and support modules.
+
+## 5. Checks actually executed in this build environment
 
 | Check | Result |
 |---|---|
-| PHP source syntax (`app`, `database`, `routes`, `config`, `tests`, `bootstrap`) | PASS - 137 PHP files |
-| TypeScript/TSX syntax transpilation | PASS - 37 TS/TSX files including Vite config |
-| Offline TypeScript structural check using ambient stubs | PASS; real package typings still require `npm install`/CI |
-| JSON (`composer.json`, `package.json`) parse | PASS |
-| XML (`phpunit.xml`) parse | PASS |
-| YAML (`docker-compose.yml`, GitHub CI) parse | PASS |
-| POSIX shell syntax (entrypoint, backup/restore/release scripts) | PASS |
-| Inertia page references | PASS - 32 references / 32 pages resolved |
-| Named route uniqueness | PASS - 81 named routes |
-| Route permission definitions | PASS - 38 permissions used / 42 defined |
-| Route controller/method reference static check | PASS |
-| Debug/conflict marker scan in product source | PASS - none found |
-| Obvious committed secret/private-key marker scan | PASS - none found |
-| Karyakar Age+Gender category boundary checks | PASS - 11 valid boundary cases + invalid input rejection |
-| CSV/TSV parser smoke checks | PASS |
-| Redis optional-password shell expansion | PASS with blank password and a password containing spaces |
-| Forbidden release directories/files in working tree (`.env`, `vendor`, `node_modules`, build cache/backups) | PASS before packaging |
+| PHP syntax for `app`, `bootstrap`, `config`, `database`, `routes`, `tests` | **PASS - 143 PHP files** |
+| TypeScript/TSX parse/transpile check using global TypeScript `--noCheck` | **PASS - 36 resource TS/TSX files + `vite.config.ts`** |
+| JSON parse (`composer.json`, `package.json`) | **PASS** |
+| XML parse (`phpunit.xml`) | **PASS** |
+| YAML parse (`docker-compose.yml`, GitHub Actions workflow) | **PASS** |
+| Compose topology static check | **PASS - `web`, `worker`, `scheduler`, `db`, `redis`; no obsolete `app` service** |
+| POSIX shell syntax | **PASS** |
+| Static source-integrity script | **PASS** |
+| Inertia page references | **PASS - 32 pages resolved** |
+| Named route uniqueness | **PASS - 82 named routes** |
+| Permission seed/use consistency | **PASS - 43 seeded; 39 used by routes/navigation** |
+| Route controller/method reference scan | **PASS** |
+| Sidebar GET-route consistency | **PASS** |
+| Debug / merge-conflict marker scan | **PASS** |
+| Forbidden release directories/secrets (`.env`, `vendor`, `node_modules`, private keys) | **PASS before packaging** |
+| Password-reset static security invariants | **PASS - 12 reset/delegation/session/audit markers** |
+| Migration FK order/static dependency scan | **PASS - 13 migrations / 40 created tables** |
+| Pure-PHP domain smoke checks | **PASS - Karyakar category boundaries + both CSV import templates** |
+| PHPUnit tests present in source | **95 named test methods** |
 
-## 5. Runtime checks that could not be executed locally
+`npm install --no-audit --no-fund` was also attempted in this environment but timed out before creating `node_modules`; it is therefore not represented as a successful dependency/runtime test.
 
-The build environment does not contain Composer, project `vendor/`, project `node_modules/`, or a Docker CLI/daemon, and external package installation is unavailable. Therefore the following were attempted but cannot truthfully be reported as locally executed/passed:
+## 6. Runtime checks that still require CI / target infrastructure
 
-- `composer install` / Composer dependency resolution
-- `php artisan test` against Laravel/PostgreSQL
-- real `npm run types:check` using installed React/Inertia/Vite package typings
-- `npm run build` / Vite production bundle
-- `docker compose config` using the Docker CLI and actual image builds/runtime
-- live PostgreSQL/Redis integration, migration boot, queue worker, scheduler and Nginx/PHP-FPM smoke testing
-- live Coolify deployment/load testing
+The current execution environment does not provide Composer, project `vendor/`, project `node_modules`, or a Docker CLI/daemon. Therefore these cannot truthfully be claimed as locally passed:
 
-Observed local blockers were: `composer: command not found`; Laravel cannot load `vendor/autoload.php`; `vite: not found`; `docker: command not found`.
+- Composer dependency resolution/install.
+- Laravel boot and `php artisan test` against the framework runtime.
+- real `npm run types:check` with React/Inertia package typings.
+- Vite production bundle.
+- `docker compose config`, image build and container runtime.
+- PostgreSQL/Redis migration/integration tests.
+- Nginx/PHP-FPM/Coolify live smoke/load tests.
 
-These are not hidden as passes. The repository GitHub Actions workflow is the required next runtime gate: it installs PHP/Node dependencies, runs TypeScript checking, builds Vite assets, runs the Laravel tests against PostgreSQL 17, verifies route/config cache compilation, validates Docker Compose, and builds both application/web Docker targets.
+GitHub Actions remains the mandatory runtime gate. It installs dependencies, performs TypeScript checking/build, runs Laravel tests against PostgreSQL 17, compiles route/config caches, validates Compose, builds Docker targets and performs the Compose readiness smoke test.
 
-## 6. Release acceptance rule
+## 7. Release acceptance rule
 
-Use this v1.0.2 deployment-hotfix package instead of the earlier v1.0.0/v1.0.1 packages. Before production data is imported or Coolify is treated as accepted:
+Before treating v1.0.4 as production accepted:
 
-1. Push the extracted source to the private GitHub repository.
-2. Require the exact commit's GitHub Actions CI to be green.
-3. Deploy that same commit with Coolify/Docker Compose.
-4. Confirm `/health/ready` returns HTTP 200 with database/cache healthy.
-5. Execute `docs/FINAL_ACCEPTANCE_MATRIX.md`, especially two-Center scope isolation, Group 2-Karyakar/10-Family composition, duplicate Family prevention/transfer, Home Visit/Target progress, reminders, reports, Bal Pravruti and support/correction workflows.
-6. Rehearse backup/restore in staging before real organizational data.
+1. Push this exact source commit to the private GitHub repository.
+2. Require GitHub Actions to be green.
+3. Redeploy the same commit in the existing Coolify Docker Compose resource; do not delete the database volume.
+4. Confirm `/health/ready` returns HTTP 200, `checks.schema=true`, and empty `missing_tables` / `missing_columns`.
+5. As Super Admin, reset a test user's password and confirm the old password/session no longer works.
+6. Grant `reset_user_passwords` to a staging Center Admin and confirm same-Center equal/lower reset succeeds while cross-Center/Zonal/Super Admin reset is denied.
+7. Review `users / password_reset` in Activity/Audit Logs and confirm no password value is stored.
+8. Execute the full `FINAL_ACCEPTANCE_MATRIX.md` before importing production data.
 
-No finite review can guarantee that software has zero defects. The audited source/static checks above have no known unresolved source/static errors; the remaining runtime/deployment gates are explicitly delegated to CI and the target environment rather than being falsely claimed as complete.
+No finite review can prove software has zero defects. The source/static pass above has no known unresolved source-integrity defect; framework/runtime/deployment acceptance remains gated by CI and the deployed environment.

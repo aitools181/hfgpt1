@@ -57,6 +57,8 @@ Store backups outside the application host and apply the retention policy approv
 - Keep HTTPS enabled at Coolify/proxy level.
 - Rotate credentials immediately when an administrator leaves or a secret is exposed.
 - Review Activity/Audit Logs for administrative changes and transfers.
+- Password resets use the dedicated `reset_user_passwords` permission. Keep it on Super Admin by default; delegate it only when operationally necessary. Delegated reset authority remains limited to equal/lower roles inside the assignee's scope.
+- After an administrative password reset, the target user's existing sessions are revoked. If Super Admin resets their own password, they are signed out immediately and must log in with the new password.
 - Supportive content uploads are limited by type and size; do not use the portal as a general file store.
 
 ## Incident priorities

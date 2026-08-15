@@ -1,6 +1,6 @@
 # Role & Permission Matrix
 
-## Roles seeded in v1.0.2
+## Roles seeded in v1.0.4
 
 | Role | Default organizational scope | Module |
 |---|---|---|
@@ -16,7 +16,7 @@
 
 ## Permission architecture
 
-The seed contains the complete v1.0.2 permission set. Permissions remain editable through Settings for authorized role managers.
+The seed contains the complete v1.0.4 permission set. Permissions remain editable through Settings for authorized role managers.
 
 Permission slugs include:
 
@@ -26,6 +26,7 @@ Permission slugs include:
 - `manage_zones`
 - `manage_centers`
 - `manage_users`
+- `reset_user_passwords`
 - `manage_roles`
 - `view_audit_logs`
 - `manage_master_data`
@@ -55,6 +56,18 @@ Permission slugs include:
 - `contact_support` / `manage_support`
 
 All authorization remains server-side even when UI links are hidden.
+
+## Password reset delegation - v1.0.4
+
+- Only Super Admin may grant or remove the `reset_user_passwords` permission in the role matrix. A role with delegated `manage_roles` cannot self-grant or remove this security-sensitive permission.
+
+- `reset_user_passwords` is enabled for **Karyalay Admin / Super Admin** by default.
+- Other roles do **not** receive it automatically. Super Admin can grant/revoke it from **Settings -> Roles & Permission Matrix**.
+- Super Admin may reset any portal user's password, including their own.
+- A delegated role may reset only users whose complete role assignment is inside that administrator's organizational scope and whose authority level is equal or lower. This prevents a Center role from resetting a Zonal/Super Admin or a user who also has an out-of-scope assignment.
+- Resetting a password rotates the remember token, revokes existing authenticated sessions using `session_version`, records `password_changed_at`, and writes a redacted audit event. The new password is never stored in audit fields.
+- `manage_users` does not imply password reset. Password changes are prohibited on the generic user-update endpoint; the dedicated reset permission is required.
+
 
 ## Phase 2 operational behavior
 

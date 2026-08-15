@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.0.4 - Password Reset RBAC + Full Re-test Hardening - 2026-08-15
+
+- Added a dedicated `reset_user_passwords` permission and secure password-reset workflow for Super Admin plus explicitly delegated roles.
+- Password-reset delegation itself is Super-Admin-controlled even if `manage_roles` is delegated, preventing a delegated role manager from granting itself account-reset authority.
+- Password reset uses a row lock (`lockForUpdate`) so concurrent resets always advance `session_version` and cannot leave a newly-created session valid after a second reset.
+
+- Added dedicated `reset_user_passwords` permission, enabled for Super Admin by default and grantable/revocable for any other role through the Settings permission matrix.
+- Added scoped password reset UI/API with password confirmation, optional reason, audit logging, remember-token rotation and stale-session revocation.
+- Added `users.session_version` and `users.password_changed_at`; login/session middleware now rejects sessions created before a subsequent password reset.
+- Prevented password changes through generic `manage_users` updates so the reset permission cannot be bypassed.
+- Hardened delegated User Management against privilege escalation, cross-Center/Zone user administration and organization-wide user-count leakage.
+- Limited reset-only user listings to accounts the delegated role can actually reset.
+- Added login flash rendering so session-expiry/self-reset messages are visible.
+- Extended `/health/ready` to check password-security schema columns.
+- Added static source-integrity checks to release tooling/CI and expanded password/security regression coverage.
+- Re-ran complete offline syntax/config/route/permission/Inertia/security/release-integrity audits; runtime dependency/Docker gates remain mandatory in GitHub CI.
+
+## 1.0.3 - Super Admin Access and Sidebar UX Hotfix - 2026-08-15
+
+- Fixed Super Admin `My Target` access: the page now opens even when the Super Admin is not linked to a Sankalp Karyakar and no approved Karyakar exists; it shows an admin preview selector/empty state instead of HTTP 403.
+- Fixed Bal Dashboard and Bal Analysis PostgreSQL 500 errors caused by an ambiguous unqualified `status` column in the child-gender aggregate join.
+- Hardened Reminders/Alerts loading against orphaned relations and added a fail-soft schema warning instead of a generic 500 when Phase 3 storage is missing.
+- Added a production repair migration for missing Phase 3 inactivity and Phase 5 Bal Pravruti tables from early deployment candidates.
+- Expanded `/health/ready` to verify operational database schema tables in addition to database/cache connectivity.
+- Fixed Bal completion Society validation to use the Bal Group's assigned Sampark Area.
+- Made desktop sidebar and main content independently scrollable.
+- Added persistent desktop sidebar scroll position across Inertia navigation.
+- Added longest-route active menu highlighting so exactly the current section remains highlighted (for example Bal Analysis does not also highlight Bal Dashboard).
+- Aligned desktop sidebar responsive breakpoint with Tailwind `lg`.
+- Added Super Admin UI access regression tests for My Target, Reminders/Alerts, Bal Dashboard and Bal Analysis.
+
 ## 1.0.2 - Coolify Deployment Hotfix - 2026-08-14
 
 - Reworked the production HTTP runtime so Nginx and PHP-FPM run in the same `web` container and FastCGI uses `127.0.0.1:9000`, eliminating cross-container FastCGI DNS/connectivity as a Coolify 502 failure mode.
