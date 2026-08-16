@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.4
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.6
 
 The repository is deployment-ready as a Docker Compose application. Coolify should build the repository; do not upload `vendor/` or `node_modules/`.
 
@@ -99,7 +99,7 @@ After deployment:
 4. Verify worker and scheduler containers remain running.
 5. Run the acceptance smoke checks in `FINAL_ACCEPTANCE_MATRIX.md` before importing real data.
 
-The Dockerfile and Compose `web` healthchecks both call `/health/ready`, so a failed database/cache dependency makes the web container report unhealthy rather than falsely healthy. Nginx talks to PHP-FPM over `127.0.0.1:9000` inside the same container, eliminating the earlier `web -> app:9000` FastCGI dependency.
+The Dockerfile and Compose `web` healthchecks call Laravel's dependency-light `/up` endpoint. This tests Nginx -> PHP-FPM -> Laravel without turning a temporary PostgreSQL/Redis outage into a pointless web restart loop. `/health/ready` remains the deep database/cache/schema diagnostic. Nginx talks to PHP-FPM over `127.0.0.1:9000` inside the same container.
 
 ## 7. Pilot/UAT data (staging only)
 
@@ -198,7 +198,30 @@ After deployment verify:
 
 ## v1.0.5 Health checks and private GitHub repositories
 
-The Compose stack defines explicit health checks for `web`, `worker`, `scheduler`, `db`, and `redis`. The public web container uses `GET /health/live` for liveness. `GET /health/ready` is the deeper dependency/schema diagnostic.
+The Compose stack defines explicit health checks for `web`, `worker`, `scheduler`, `db`, and `redis`. The public web container uses `GET /up` for dependency-light liveness. `GET /health/ready` is the deeper dependency/schema diagnostic.
 
 For a private GitHub repository, configure Coolify with either a GitHub App that has access to this repository or a repository deploy key. A resource configured only as a public-repository source will not be able to fetch new commits after the repository becomes private. Changing visibility alone does not terminate already-running containers, but a later redeploy/rebuild can fail if source access is no longer valid.
 
+
+
+## v1.0.6 Self-healing watchdog
+
+The `web` service has two recovery layers:
+
+1. PID supervision: if Nginx or PHP-FPM exits, the container exits non-zero.
+2. HTTP watchdog: after the startup grace period, the supervisor calls `http://127.0.0.1/up`. After the configured number of consecutive failures, the container exits non-zero.
+
+Docker Compose keeps `restart: unless-stopped`, so an unexpected exit is automatically restarted. An intentional `docker compose stop` or Coolify stop remains respected.
+
+Optional environment controls (defaults shown):
+
+```env
+WEB_WATCHDOG_ENABLED=true
+WEB_WATCHDOG_URL=http://127.0.0.1/up
+WEB_WATCHDOG_INTERVAL_SECONDS=10
+WEB_WATCHDOG_TIMEOUT_SECONDS=5
+WEB_WATCHDOG_FAILURE_THRESHOLD=3
+WEB_WATCHDOG_START_GRACE_SECONDS=30
+```
+
+Do not point the watchdog at `/health/ready`; database/cache failures need dependency recovery, not repeated web-container restarts.

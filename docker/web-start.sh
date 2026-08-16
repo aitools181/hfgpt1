@@ -3,6 +3,14 @@ set -eu
 
 PHP_PID=""
 NGINX_PID=""
+WATCHDOG_FAILURES=0
+
+is_positive_integer() {
+    case "${1:-}" in
+        ''|*[!0-9]*|0) return 1 ;;
+        *) return 0 ;;
+    esac
+}
 
 shutdown() {
     code="${1:-0}"
@@ -21,6 +29,23 @@ shutdown() {
 }
 
 trap 'echo "[web] Received termination signal; stopping Nginx and PHP-FPM..."; shutdown 0' TERM INT HUP
+
+WATCHDOG_ENABLED="${WEB_WATCHDOG_ENABLED:-true}"
+WATCHDOG_URL="${WEB_WATCHDOG_URL:-http://127.0.0.1/up}"
+WATCHDOG_INTERVAL="${WEB_WATCHDOG_INTERVAL_SECONDS:-10}"
+WATCHDOG_TIMEOUT="${WEB_WATCHDOG_TIMEOUT_SECONDS:-5}"
+WATCHDOG_THRESHOLD="${WEB_WATCHDOG_FAILURE_THRESHOLD:-3}"
+WATCHDOG_START_GRACE="${WEB_WATCHDOG_START_GRACE_SECONDS:-30}"
+
+if [ "$WATCHDOG_ENABLED" = "true" ]; then
+    for value_name in WATCHDOG_INTERVAL WATCHDOG_TIMEOUT WATCHDOG_THRESHOLD WATCHDOG_START_GRACE; do
+        eval "value=\${$value_name}"
+        if ! is_positive_integer "$value"; then
+            echo "[web] ERROR: $value_name must be a positive integer; got '$value'."
+            exit 1
+        fi
+    done
+fi
 
 printf '%s\n' "[web] Validating Nginx and PHP-FPM configuration..."
 nginx -t
@@ -49,8 +74,18 @@ printf '%s\n' "[web] Starting Nginx in foreground-supervised mode..."
 nginx -g 'daemon off;' &
 NGINX_PID=$!
 
-# Keep PID 1 alive only while both critical processes are alive. Docker's
-# restart policy can then recover from an unexpected Nginx or PHP-FPM exit.
+if [ "$WATCHDOG_ENABLED" = "true" ]; then
+    WATCHDOG_NEXT_CHECK=$(( $(date +%s) + WATCHDOG_START_GRACE ))
+    printf '%s\n' "[web] Self-healing watchdog enabled: $WATCHDOG_URL every ${WATCHDOG_INTERVAL}s, timeout ${WATCHDOG_TIMEOUT}s, restart after ${WATCHDOG_THRESHOLD} consecutive failures, initial grace ${WATCHDOG_START_GRACE}s."
+else
+    WATCHDOG_NEXT_CHECK=0
+    printf '%s\n' "[web] Self-healing watchdog disabled by WEB_WATCHDOG_ENABLED=$WATCHDOG_ENABLED."
+fi
+
+# Keep the container alive only while both critical processes are healthy.
+# In addition to PID supervision, the internal HTTP watchdog exercises the full
+# Nginx -> PHP-FPM -> Laravel path. Consecutive liveness failures force this
+# process to exit non-zero so Docker's restart policy can automatically recover.
 while :; do
     if ! kill -0 "$PHP_PID" 2>/dev/null; then
         wait "$PHP_PID" 2>/dev/null || true
@@ -62,6 +97,27 @@ while :; do
         wait "$NGINX_PID" 2>/dev/null || true
         echo "[web] ERROR: Nginx exited unexpectedly; terminating container so Docker can restart it."
         shutdown 1
+    fi
+
+    if [ "$WATCHDOG_ENABLED" = "true" ]; then
+        now=$(date +%s)
+        if [ "$now" -ge "$WATCHDOG_NEXT_CHECK" ]; then
+            if curl -fsS --connect-timeout "$WATCHDOG_TIMEOUT" --max-time "$WATCHDOG_TIMEOUT" "$WATCHDOG_URL" >/dev/null 2>&1; then
+                if [ "$WATCHDOG_FAILURES" -gt 0 ]; then
+                    echo "[web] Watchdog recovered after $WATCHDOG_FAILURES consecutive failure(s)."
+                fi
+                WATCHDOG_FAILURES=0
+            else
+                WATCHDOG_FAILURES=$((WATCHDOG_FAILURES + 1))
+                echo "[web] WARNING: watchdog liveness check failed ($WATCHDOG_FAILURES/$WATCHDOG_THRESHOLD): $WATCHDOG_URL"
+
+                if [ "$WATCHDOG_FAILURES" -ge "$WATCHDOG_THRESHOLD" ]; then
+                    echo "[web] ERROR: watchdog reached failure threshold; terminating container so Docker can restart it."
+                    shutdown 1
+                fi
+            fi
+            WATCHDOG_NEXT_CHECK=$(( $(date +%s) + WATCHDOG_INTERVAL ))
+        fi
     fi
 
     sleep 2

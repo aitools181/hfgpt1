@@ -4,7 +4,8 @@ Use this when the Coolify card shows **Running** but the site is unavailable or 
 
 ## 1. Distinguish liveness from readiness
 
-- `GET /health/live` should return HTTP 200 when Nginx + PHP-FPM can serve Laravel.
+- `GET /up` should return HTTP 200 when Nginx + PHP-FPM can serve Laravel; Docker/Coolify health checks and the self-healing watchdog use this dependency-light route.
+- `GET /health/live` is an operator-facing liveness endpoint.
 - `GET /health/ready` should return HTTP 200 only when PostgreSQL, Redis/cache and the required database schema are ready.
 
 ## 2. Inspect the deployed container health
@@ -44,7 +45,7 @@ docker logs --tail 200 <db-container-name>
 docker logs --tail 200 <redis-container-name>
 ```
 
-v1.0.5 emits an explicit message if PHP-FPM or Nginx exits unexpectedly and then intentionally terminates the web container so Docker can restart it.
+v1.0.6 emits an explicit message if PHP-FPM/Nginx exits unexpectedly or if the internal `/up` watchdog reaches its consecutive-failure threshold. It then intentionally terminates the web container so Docker can restart it.
 
 ## 4. Server-level interruptions
 
