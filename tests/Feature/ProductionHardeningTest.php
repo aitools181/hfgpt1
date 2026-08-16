@@ -24,6 +24,11 @@ class ProductionHardeningTest extends TestCase
             ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     }
 
+    public function test_liveness_endpoint_does_not_depend_on_database_or_cache(): void
+    {
+        $this->getJson('/health/live')->assertOk()->assertJson(['status' => 'alive']);
+    }
+
     public function test_readiness_endpoint_checks_database_and_cache(): void
     {
         $this->getJson('/health/ready')->assertOk()->assertJson(['status' => 'ready', 'checks' => ['database' => true, 'cache' => true, 'schema' => true], 'missing_tables' => [], 'missing_columns' => []]);

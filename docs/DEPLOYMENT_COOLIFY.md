@@ -195,3 +195,10 @@ After deployment verify:
 2. Super Admin can open `/field/my-target` even when no approved Karyakar exists; an empty admin-preview state is expected until a Karyakar is approved.
 3. Super Admin can open `/field/reminders`, `/bal-pravruti`, and `/bal-pravruti/analysis` without HTTP 500.
 4. On desktop, the left navigation and right content pane scroll independently; the active navigation item remains highlighted and the sidebar retains its scroll position across navigation.
+
+## v1.0.5 Health checks and private GitHub repositories
+
+The Compose stack defines explicit health checks for `web`, `worker`, `scheduler`, `db`, and `redis`. The public web container uses `GET /health/live` for liveness. `GET /health/ready` is the deeper dependency/schema diagnostic.
+
+For a private GitHub repository, configure Coolify with either a GitHub App that has access to this repository or a repository deploy key. A resource configured only as a public-repository source will not be able to fetch new commits after the repository becomes private. Changing visibility alone does not terminate already-running containers, but a later redeploy/rebuild can fail if source access is no longer valid.
+

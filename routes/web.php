@@ -23,6 +23,7 @@ use App\Http\Controllers\Registration\KaryakarController;
 use App\Http\Controllers\Monitoring\AnalysisController;
 use App\Http\Controllers\Monitoring\ReportController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\LiveHealthController;
 use App\Http\Controllers\Support\AnnouncementController;
 use App\Http\Controllers\Support\CorrectionRequestController;
 use App\Http\Controllers\Support\FamilyTimeController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\Support\SupportRequestController;
 use App\Http\Controllers\Support\TestimonialController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/health/live', LiveHealthController::class)->name('health.live');
 Route::get('/health/ready', HealthController::class)->name('health.ready');
 
 Route::middleware('guest')->group(function (): void {

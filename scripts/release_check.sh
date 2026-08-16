@@ -22,6 +22,9 @@ with open('docker-compose.yml','r',encoding='utf-8') as f:
     data=yaml.safe_load(f)
 assert isinstance(data,dict) and 'services' in data and {'web','worker','scheduler','db','redis'} <= set(data['services'])
 assert 'app' not in data['services']
+for service in ('web','worker','scheduler','db','redis'):
+    assert 'healthcheck' in data['services'][service], f'{service} healthcheck missing'
+assert '/health/live' in ' '.join(data['services']['web']['healthcheck']['test'])
 PY
 
 echo "[6/8] Runtime dependencies"

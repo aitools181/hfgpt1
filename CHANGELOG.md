@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5 - Runtime health & Coolify hardening
+
+- Added separate `/health/live` liveness and retained `/health/ready` dependency readiness.
+- Added explicit Compose health checks for every long-running service.
+- Reworked the web process supervisor so an unexpected PHP-FPM or Nginx exit terminates the container and activates Docker restart recovery.
+- Added graceful init/stop handling for web, worker and scheduler containers.
+- Added private-GitHub/Coolify deployment guidance.
+
 ## 1.0.4 - Password Reset RBAC + Full Re-test Hardening - 2026-08-15
 
 - Added a dedicated `reset_user_passwords` permission and secure password-reset workflow for Super Admin plus explicitly delegated roles.

@@ -4,6 +4,8 @@ services:
       context: .
       target: web
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     expose:
       - "80"
     environment:
@@ -47,17 +49,19 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health/ready >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health/live >/dev/null || exit 1"]
       interval: 30s
       timeout: 8s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
   worker:
     build:
       context: .
       target: app
     restart: unless-stopped
+    init: true
+    stop_grace_period: 35s
     command: ["php", "artisan", "queue:work", "redis", "--queue=imports,default", "--sleep=2", "--tries=3", "--timeout=900", "--max-jobs=1000", "--max-time=3600"]
     environment:
       APP_ENV: ${APP_ENV:-production}
@@ -89,12 +93,20 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -a -q 'queue:work' /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   scheduler:
     build:
       context: .
       target: app
     restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
     command: ["php", "artisan", "schedule:work"]
     environment:
       APP_ENV: ${APP_ENV:-production}
@@ -126,6 +138,12 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "grep -a -q 'schedule:work' /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   db:
     image: postgres:17-alpine
