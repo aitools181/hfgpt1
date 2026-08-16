@@ -67,3 +67,12 @@ Store backups outside the application host and apply the retention policy approv
 2. Preserve logs and a current backup before destructive remediation when possible.
 3. Restore service from a known-good application commit and verified backup.
 4. Document what changed, who acted and what data was affected.
+
+
+## Automatic web self-healing
+
+The web container is configured with `restart: unless-stopped`. Its supervisor exits the container when either Nginx/PHP-FPM dies or the internal `/up` liveness check fails for the configured consecutive-failure threshold. Docker then restarts the container automatically.
+
+When an automatic restart occurs, inspect the preceding container logs and host metrics. Common causes include OOM kills, PHP-FPM/Nginx crashes, disk exhaustion, host/Docker restarts, or application-level hangs. Repeated restarts are a symptom to diagnose, not a substitute for fixing the underlying cause.
+
+Use `/health/ready` to distinguish dependency problems: if `/up` is healthy but `/health/ready` is degraded, investigate PostgreSQL/Redis/schema rather than restarting the web service.

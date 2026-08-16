@@ -49,5 +49,5 @@ COPY docker/nginx/default.conf /etc/nginx/conf.d/happy-family.conf
 COPY docker/web-start.sh /usr/local/bin/happy-family-web
 RUN chmod +x /usr/local/bin/happy-family-web
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=8s --start-period=90s --retries=5 CMD curl -fsS http://127.0.0.1/health/live >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=8s --start-period=90s --retries=5 CMD curl -fsS --connect-timeout 5 --max-time 8 http://127.0.0.1/up >/dev/null || exit 1
 CMD ["happy-family-web"]

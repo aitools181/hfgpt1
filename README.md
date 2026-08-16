@@ -195,8 +195,10 @@ The offline environment used to assemble and audit this release did not provide 
 
 ### Runtime health
 
-- `/health/live` - container/process liveness used by Docker/Coolify health checks.
+- `/up` - dependency-light Laravel liveness used internally by Docker/Coolify health checks and the self-healing watchdog.
+- `/health/live` - operator-facing application liveness endpoint.
 - `/health/ready` - PostgreSQL, Redis/cache and required-schema readiness diagnostic.
+- The web supervisor checks `/up` every 10 seconds after a 30-second grace period. Three consecutive failures make the web container exit non-zero; `restart: unless-stopped` then restarts it automatically.
 
 For private GitHub repositories, grant Coolify repository access through a GitHub App or deploy key before redeploying.
 

@@ -106,6 +106,17 @@ for path, markers in required_password_reset_markers.items():
         if marker not in source:
             issues.append(f"Password reset invariant missing '{marker}' in {path.relative_to(ROOT)}")
 
+
+# v1.0.6 runtime self-healing invariants.
+watchdog = read(ROOT / "docker/web-start.sh")
+for marker in ("WEB_WATCHDOG_ENABLED", "WEB_WATCHDOG_FAILURE_THRESHOLD", "watchdog reached failure threshold", "shutdown 1", "/up"):
+    if marker not in watchdog:
+        issues.append(f"Runtime watchdog invariant missing: {marker}")
+compose = read(ROOT / "docker-compose.yml")
+for marker in ("restart: unless-stopped", "WEB_WATCHDOG_ENABLED", "WEB_WATCHDOG_FAILURE_THRESHOLD", "http://127.0.0.1/up"):
+    if marker not in compose:
+        issues.append(f"Compose self-healing invariant missing: {marker}")
+
 if issues:
     print("STATIC INTEGRITY CHECK FAILED")
     for issue in issues:

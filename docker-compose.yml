@@ -40,6 +40,12 @@ services:
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
       PILOT_DATA: ${PILOT_DATA:-false}
       PILOT_PASSWORD: ${PILOT_PASSWORD:-}
+      WEB_WATCHDOG_ENABLED: ${WEB_WATCHDOG_ENABLED:-true}
+      WEB_WATCHDOG_URL: ${WEB_WATCHDOG_URL:-http://127.0.0.1/up}
+      WEB_WATCHDOG_INTERVAL_SECONDS: ${WEB_WATCHDOG_INTERVAL_SECONDS:-10}
+      WEB_WATCHDOG_TIMEOUT_SECONDS: ${WEB_WATCHDOG_TIMEOUT_SECONDS:-5}
+      WEB_WATCHDOG_FAILURE_THRESHOLD: ${WEB_WATCHDOG_FAILURE_THRESHOLD:-3}
+      WEB_WATCHDOG_START_GRACE_SECONDS: ${WEB_WATCHDOG_START_GRACE_SECONDS:-30}
     volumes:
       - app_storage:/var/www/html/storage/app/public
       - app_private:/var/www/html/storage/app/private
@@ -49,7 +55,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/health/live >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS --connect-timeout 5 --max-time 8 http://127.0.0.1/up >/dev/null || exit 1"]
       interval: 30s
       timeout: 8s
       retries: 5

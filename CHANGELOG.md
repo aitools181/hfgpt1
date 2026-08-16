@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 - Self-healing web watchdog - 2026-08-16
+
+- Added an internal HTTP watchdog that exercises the complete Nginx -> PHP-FPM -> Laravel path through Laravel's dependency-light `/up` endpoint.
+- After 3 consecutive liveness failures (configurable), the web supervisor exits non-zero so `restart: unless-stopped` automatically recreates the web runtime.
+- Added watchdog interval, timeout, failure-threshold and startup-grace environment controls with safe production defaults.
+- Switched Dockerfile/Compose web health checks to `/up` so transient PostgreSQL/Redis outages do not create pointless web restart loops; `/health/ready` remains the deep dependency/schema diagnostic.
+- Added watchdog/restart invariants to release checks and deployment/operations documentation.
+
 ## 1.0.5 - Runtime health & Coolify hardening
 
 - Added separate `/health/live` liveness and retained `/health/ready` dependency readiness.
