@@ -192,3 +192,11 @@ Start with:
 ## Build-environment note
 
 The offline environment used to assemble and audit this release did not provide a Composer binary, Docker CLI or external dependency-network access. The source was re-audited with PHP syntax checks, route/permission/static checks, TypeScript/TSX parser/transpile checks using the locally available TypeScript compiler with `--noCheck`, manifest/config parsing, pure-PHP domain checks and release-integrity verification. Real dependency installation, Laravel/PostgreSQL runtime tests, the actual Vite production build and Docker image/runtime validation remain configured in GitHub CI and must be green before production sign-off. See `docs/FULL_CODE_AUDIT.md`.
+
+### Runtime health
+
+- `/health/live` - container/process liveness used by Docker/Coolify health checks.
+- `/health/ready` - PostgreSQL, Redis/cache and required-schema readiness diagnostic.
+
+For private GitHub repositories, grant Coolify repository access through a GitHub App or deploy key before redeploying.
+
