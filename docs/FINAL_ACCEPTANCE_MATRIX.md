@@ -1,4 +1,4 @@
-# Final Acceptance Matrix - v1.0.4
+# Final Acceptance Matrix - v1.0.9
 
 This matrix maps the uploaded SRS page structure, integrated additions and wireframe support screens to implementation evidence and production acceptance checks.
 
@@ -50,12 +50,21 @@ This matrix maps the uploaded SRS page structure, integrated additions and wiref
 | Sankalp Family edit/correction | audited Family/Member update workflow | RegressionAuditTest | Update permitted fields with mandatory reason; block unsafe Karyakar-linked Age/Gender direct changes and active-assigned Family deactivation |
 | Transfer target lifecycle | GroupAssignmentService | RegressionAuditTest | Transfer from an active Group returns source to draft and closes/audits any open source target |
 | Multi-Center isolation | OrganizationalScope + guards | Phase 0/2/4/5/6 + PermissionMatrixTest | Repeat core workflows using two Centers and confirm no cross-Center access |
-| Responsive/mobile | responsive layout + mobile My Target | frontend/manual | Test phone/tablet/desktop widths; field completion remains usable |
+| Responsive/mobile app shell | sticky mobile app bar + role-aware bottom nav/More sheet + responsive layout + mobile My Target | frontend static/mobile manual | Test 320/360/390/430px phones, tablet and desktop; active nav remains correct; no page-level horizontal overflow; field completion remains usable |
+| Mobile data records | 23 responsive table/card views with semantic header labels | frontend static/mobile manual | On phone widths each table row becomes a readable labeled card; tablet/desktop retains standard table layout and horizontal containment where needed |
+| Mobile safe-area/PWA presentation | viewport-fit, theme metadata, manifest and app icons | frontend static/manual | iOS/Android safe areas do not cover app bar/bottom nav; supported Add-to-Home-Screen launch uses standalone app presentation |
 | Security headers | SecurityHeaders middleware + Nginx | ProductionHardeningTest | Verify CSP, nosniff, frame/referrer/permissions and HTTPS HSTS in production |
 | Readiness | `/health/ready` | ProductionHardeningTest | DB/cache healthy returns 200; dependency failure returns 503 |
 | Backup/restore | scripts/backup.sh + scripts/restore.sh | shell/static review | Create backup, verify SHA256, restore in staging, recheck readiness and record counts |
 | CI/build | GitHub Actions | `.github/workflows/ci.yml` | CI must pass Composer validation/install, TypeScript, Vite, Laravel tests and image builds |
 | Coolify deployment | Docker Compose + runbook | compose structural validation | Persistent volumes survive redeploy; worker/scheduler healthy; HTTPS domain works |
+| Runtime self-healing | web/background supervisors + Docker restart policy | supervisor harnesses + CI fault injection | Kill/recycle test process in staging; service returns healthy without manual redeploy; repeated unrecoverable web failure increments Docker restart count and recovers |
+| Live-but-unresponsive detection | direct Nginx + dedicated FPM control + isolated Laravel probes | static/runtime health harness + CI | A stuck lower-level component is distinguished from DB/Redis readiness and recovered without false restart loops |
+| Large report memory safety | capped preview + lazy ReportService streaming + dedicated report FPM pool | static checks + report tests + CI | Large CSV export completes without making interactive pages unavailable |
+| Large import memory safety | streaming CSV/TSV/XMLReader XLSX + queue worker limits | 100k streaming harness + CI | 100k-row CSV remains queued/processable; malformed/oversized file fails batch without web outage |
+| Resource/OOM containment | per-service memory/PID caps + conservative DB/Redis settings | Compose invariant checks + host preflight | Host meets preflight; service does not exceed configured ceiling without isolated restart/failure evidence |
+| Log/disk containment | stdout/stderr Nginx + Docker rotation + bounded non-fatal supervisor logs | static/shell checks | Runtime logs rotate and a log-write problem does not stop supervisor |
+| Redis queue degradation | web file sessions/cache + Redis writable readiness | CI stops Redis while web stays live | Redis outage does not kill web; readiness degrades and queue recovers when Redis returns |
 | Super Admin field preview | MyTargetController + My Target empty/admin-preview state | UiAccessRegressionTest | Super Admin opens My Target without 403 even when no approved Karyakar exists; selector works when Karyakars exist |
 | Super Admin Bal pages | qualified Bal analytics SQL + Bal controllers | UiAccessRegressionTest | Bal Dashboard and Bal Analysis open without 500 on PostgreSQL |
 | Sidebar navigation UX | AppLayout independent scroll + active route + scroll persistence | TypeScript syntax/manual | Sidebar and content scroll independently; clicked route stays highlighted; sidebar does not jump to top after navigation |

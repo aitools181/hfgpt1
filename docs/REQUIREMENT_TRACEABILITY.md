@@ -4,7 +4,7 @@ Baseline: uploaded **SMVS Happy Family Project SRS Version 3.0** plus **Full Por
 
 Status values:
 
-- `Implemented` - delivered in the cumulative v1.0.4 hardened package.
+- `Implemented` - delivered in the cumulative v1.0.9 hardened/mobile-responsive package.
 - `Decision` - source contains ambiguity recorded in `DECISIONS_PENDING.md`.
 
 ## Core and integrated SRS requirements
@@ -156,4 +156,4 @@ The wireframe contains operational/support screens beyond the core Section 29 pa
 
 ## Acceptance coverage policy
 
-The cumulative v1.0.4 source package has every in-scope functional row above implemented or explicitly governed by a documented decision. Automated tests and manual production checks are mapped in `FINAL_ACCEPTANCE_MATRIX.md`. Target-infrastructure runtime/load validation is intentionally a deployment sign-off step and is not represented as having run inside the offline build environment.
+The cumulative v1.0.9 source package has every in-scope functional row above implemented or explicitly governed by a documented decision. Automated tests and manual production checks are mapped in `FINAL_ACCEPTANCE_MATRIX.md`. Target-infrastructure runtime/load validation is intentionally a deployment sign-off step and is not represented as having run inside the offline build environment.

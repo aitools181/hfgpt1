@@ -1,63 +1,67 @@
-# Coolify Runtime Diagnosis
+# Coolify Runtime Diagnosis - v1.0.8
 
-Use this when the Coolify card shows **Running** but the site is unavailable or returns 502.
+Use this only when a running deployment becomes unavailable, restarts, or exits. Preserve evidence before a manual redeploy when possible.
 
-## 1. Distinguish liveness from readiness
+## 1. Identify containers
 
-- `GET /up` should return HTTP 200 when Nginx + PHP-FPM can serve Laravel; Docker/Coolify health checks and the self-healing watchdog use this dependency-light route.
-- `GET /health/live` is an operator-facing liveness endpoint.
-- `GET /health/ready` should return HTTP 200 only when PostgreSQL, Redis/cache and the required database schema are ready.
-
-## 2. Inspect the deployed container health
-
-From the Coolify server terminal, first list this stack's containers:
-
-```sh
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+```bash
+docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}' | grep hfgpt1
 ```
 
-Then inspect the web container:
+## 2. Inspect the affected container
 
-```sh
-docker inspect <web-container-name> --format '{{json .State}}'
+```bash
+docker inspect <container> --format 'Status={{.State.Status}} ExitCode={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} Restart={{.HostConfig.RestartPolicy.Name}} RestartCount={{.RestartCount}} Started={{.State.StartedAt}} Finished={{.State.FinishedAt}} Error={{.State.Error}}'
 ```
 
-Important fields:
+Expected restart policy in v1.0.8 is `always` for web/worker/scheduler/db/redis.
 
-- `Status`
-- `Running`
-- `Restarting`
-- `ExitCode`
-- `OOMKilled`
-- `Health.Status`
+## 3. Review web supervisor evidence
 
-Check restart count:
-
-```sh
-docker inspect <web-container-name> --format 'restart_count={{.RestartCount}} oom={{.State.OOMKilled}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+```bash
+docker logs --tail 500 <web-container>
 ```
 
-## 3. Logs
+Important messages:
 
-```sh
-docker logs --tail 200 <web-container-name>
-docker logs --tail 200 <db-container-name>
-docker logs --tail 200 <redis-container-name>
+- `recovering PHP-FPM reason='PHP-FPM master exited unexpectedly'`
+- `recovering PHP-FPM reason='PHP-FPM master PID was alive but control pool was unresponsive'`
+- `recovering Nginx reason='Nginx master exited unexpectedly'`
+- `recovering Nginx reason='Nginx PID was alive but health endpoint was unresponsive'`
+- `isolated Laravel watchdog probe failed`
+- `runtime snapshot`
+- `shutdown code=1 reason=...`
+
+A single Nginx/PHP-FPM failure should normally recover in the same container. Docker restart should occur only after repeated unrecoverable web failures or an external/container-level kill.
+
+## 4. Check OOM/kernel events
+
+```bash
+journalctl -k --since "2 hours ago" | grep -Ei 'out of memory|oom|killed process'
 ```
 
-v1.0.6 emits an explicit message if PHP-FPM/Nginx exits unexpectedly or if the internal `/up` watchdog reaches its consecutive-failure threshold. It then intentionally terminates the web container so Docker can restart it.
+`OOMKilled=true` or exit 137 is strong evidence of memory pressure/SIGKILL. v1.0.8 adds service memory ceilings and lower per-process limits specifically to contain this risk.
 
-## 4. Server-level interruptions
+## 5. Distinguish liveness from dependency readiness
 
-If all project containers stopped at the same time, inspect server/Docker events around that time. Common infrastructure causes include a server reboot, Docker daemon restart, disk exhaustion or an out-of-memory event.
+```text
+/up
+/health/live
+/health/ready
+```
 
-## 5. GitHub repository visibility
+- `/up` failure: Laravel/FPM/Nginx application path problem.
+- `/up` healthy + `/health/ready` degraded: investigate DB/Redis/schema/storage/disk; do not repeatedly restart web.
+- Redis readiness tests write capability, not only PING.
 
-Changing a repository from public to private does not directly stop containers that are already running. It does change whether Coolify can fetch the source on the next deploy/rebuild.
+## 6. Worker/scheduler
 
-For a private repository use one of:
+Their container should stay alive while the Laravel child is recycled/restarted in-container. Logs show `child exited rc=... runtime=...; restarting after ...`. Repeated child crashes indicate an application/dependency issue to diagnose, but should not require a Compose redeploy.
 
-- Coolify GitHub App with this repository selected, or
-- a repository-specific deploy key.
+## 7. One-command helper
 
-If the resource was originally created as a public-repository source and the repository is later made private without authenticated access, the next source fetch/deploy can fail.
+From the repository on the Coolify host:
+
+```bash
+scripts/runtime_diagnose_host.sh <web-container-name-or-id>
+```

@@ -16,6 +16,12 @@ class ProcessRegistrationImport implements ShouldQueue
     public int $tries = 3;
     public int $timeout = 900;
 
+    /** @return array<int, int> */
+    public function backoff(): array
+    {
+        return [15, 60, 180];
+    }
+
     public function __construct(public int $batchId)
     {
         $this->onQueue('imports');
@@ -36,10 +42,12 @@ class ProcessRegistrationImport implements ShouldQueue
         $extension = strtolower(pathinfo($batch->stored_path, PATHINFO_EXTENSION));
         if ($batch->type === 'families') {
             $service->importFamilies($batch, $absolutePath, $extension);
+            $this->deleteSourceFile($batch);
             return;
         }
         if ($batch->type === 'areas') {
             $service->importAreas($batch, $absolutePath, $extension);
+            $this->deleteSourceFile($batch);
             return;
         }
 
@@ -49,10 +57,28 @@ class ProcessRegistrationImport implements ShouldQueue
     public function failed(?Throwable $exception): void
     {
         $message = $exception?->getMessage() ?: 'Import processing failed.';
-        ImportBatch::query()->whereKey($this->batchId)->update([
-            'status' => 'failed',
-            'errors' => [['row' => null, 'message' => mb_substr($message, 0, 1000)]],
-            'completed_at' => now(),
-        ]);
+        $batch = ImportBatch::query()->find($this->batchId);
+        if ($batch) {
+            $batch->update([
+                'status' => 'failed',
+                'errors' => [['row' => null, 'message' => mb_substr($message, 0, 1000)]],
+                'completed_at' => now(),
+            ]);
+            $this->deleteSourceFile($batch);
+        }
+    }
+
+    private function deleteSourceFile(ImportBatch $batch): void
+    {
+        if (! $batch->stored_path) {
+            return;
+        }
+        try {
+            Storage::disk('local')->delete($batch->stored_path);
+        } catch (Throwable $exception) {
+            report($exception);
+            return;
+        }
+        $batch->forceFill(['stored_path' => null])->saveQuietly();
     }
 }

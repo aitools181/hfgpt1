@@ -29,7 +29,7 @@ class ReportController extends Controller
     {
         $type = (string) $request->query('report', 'center_performance');
         $input = $request->only(['center_id', 'group_id', 'karyakar_id', 'area_id', 'gender', 'category', 'status', 'date_from', 'date_to']);
-        $report = $reports->build($request->user(), $type, $input);
+        $report = $reports->stream($request->user(), $type, $input);
         $filename = 'happy-family-'.str_replace('_', '-', $report['type']).'-'.now()->format('Ymd-His').'.csv';
 
         return response()->streamDownload(function () use ($report): void {
@@ -37,6 +37,9 @@ class ReportController extends Controller
             fwrite($handle, "\xEF\xBB\xBF");
             fputcsv($handle, array_values($report['columns']), ',', '"', '');
             foreach ($report['rows'] as $row) {
+                if (connection_aborted()) {
+                    break;
+                }
                 $ordered = [];
                 foreach (array_keys($report['columns']) as $key) {
                     $value = $row[$key] ?? '';

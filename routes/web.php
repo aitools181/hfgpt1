@@ -32,14 +32,21 @@ use App\Http\Controllers\Support\SharedContentController;
 use App\Http\Controllers\Support\StickyNoteController;
 use App\Http\Controllers\Support\SupportRequestController;
 use App\Http\Controllers\Support\TestimonialController;
+use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
-Route::get('/health/live', LiveHealthController::class)->name('health.live');
-Route::get('/health/ready', HealthController::class)->name('health.ready');
+// Health endpoints must not open a Redis-backed session. This keeps liveness
+// independent from Redis and lets readiness report a dependency failure instead
+// of failing inside StartSession before the controller can run.
+$healthMiddleware = [StartSession::class, ShareErrorsFromSession::class, HandleInertiaRequests::class];
+Route::get('/health/live', LiveHealthController::class)->withoutMiddleware($healthMiddleware)->name('health.live');
+Route::get('/health/ready', HealthController::class)->withoutMiddleware($healthMiddleware)->name('health.ready');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
-    Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+    Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:10,1')->name('login.store');
 });
 
 Route::middleware(['auth', 'active'])->group(function (): void {
@@ -55,6 +62,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::put('/admin/centers/{center}', [CenterController::class, 'update'])->middleware(['permission:manage_centers', 'scope'])->name('centers.update');
 
     Route::get('/admin/users', [UserController::class, 'index'])->middleware('permission:manage_users,reset_user_passwords')->name('users.index');
+    Route::get('/admin/users/karyakars/search', [UserController::class, 'searchKaryakars'])->middleware('permission:manage_users')->name('users.karyakars.search');
     Route::post('/admin/users', [UserController::class, 'store'])->middleware('permission:manage_users')->name('users.store');
     Route::put('/admin/users/{user}', [UserController::class, 'update'])->middleware('permission:manage_users')->name('users.update');
     Route::put('/admin/users/{user}/password', [UserController::class, 'resetPassword'])->middleware('permission:reset_user_passwords')->name('users.password.reset');
@@ -76,9 +84,11 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/registration/karyakars/{karyakar}/decision', [KaryakarController::class, 'decide'])->middleware('permission:approve_karyakar')->name('karyakars.decide');
 
     Route::get('/registration/imports', [ImportController::class, 'index'])->middleware('permission:register_family')->name('imports.index');
-    Route::post('/registration/imports', [ImportController::class, 'store'])->middleware('permission:register_family')->name('imports.store');
+    Route::post('/registration/imports', [ImportController::class, 'store'])->middleware(['permission:register_family', 'throttle:10,1'])->name('imports.store');
 
     Route::get('/assignments/groups', [GroupController::class, 'index'])->middleware('permission:view_own_assignments')->name('groups.index');
+    Route::get('/assignments/groups/karyakars/search', [GroupController::class, 'searchKaryakars'])->middleware('permission:create_group')->name('groups.karyakars.search');
+    Route::get('/assignments/groups/{group}/families/search', [GroupController::class, 'searchEligibleFamilies'])->middleware('permission:view_own_assignments')->name('groups.families.search');
     Route::post('/assignments/groups', [GroupController::class, 'store'])->middleware('permission:create_group')->name('groups.store');
     Route::get('/assignments/groups/{group}', [GroupController::class, 'show'])->middleware('permission:view_own_assignments')->name('groups.show');
     Route::post('/assignments/groups/{group}/families', [GroupController::class, 'assignFamily'])->middleware('permission:view_own_assignments')->name('groups.families.assign');
@@ -89,9 +99,11 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/assignments/groups/{group}/families/{assignment}/transfer', [GroupController::class, 'transferFamily'])->middleware('permission:assign_transfer_families')->name('groups.families.transfer');
 
     Route::get('/assignments/areas', [AreaAssignmentController::class, 'index'])->middleware('permission:assign_area_society')->name('area-assignments.index');
+    Route::get('/assignments/areas/options/search', [AreaAssignmentController::class, 'searchOptions'])->middleware('permission:assign_area_society')->name('area-assignments.options.search');
     Route::post('/assignments/areas', [AreaAssignmentController::class, 'store'])->middleware('permission:assign_area_society')->name('area-assignments.store');
 
     Route::get('/assignments/targets', [TargetController::class, 'index'])->middleware('permission:assign_target')->name('targets.index');
+    Route::get('/assignments/targets/options/search', [TargetController::class, 'searchOptions'])->middleware('permission:assign_target')->name('targets.options.search');
     Route::post('/assignments/targets', [TargetController::class, 'store'])->middleware('permission:assign_target')->name('targets.store');
 
     Route::get('/field/my-target', MyTargetController::class)->middleware('permission:mark_home_visit')->name('field.my-target');
@@ -101,15 +113,17 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 
     Route::get('/bal-pravruti', BalDashboardController::class)->middleware('permission:access_bal_pravruti')->name('bal.dashboard');
     Route::get('/bal-pravruti/groups', [BalGroupController::class, 'index'])->middleware('permission:access_bal_pravruti')->name('bal.groups.index');
+    Route::get('/bal-pravruti/groups/options/search', [BalGroupController::class, 'searchOptions'])->middleware('permission:manage_bal_groups')->name('bal.groups.options.search');
     Route::post('/bal-pravruti/groups', [BalGroupController::class, 'store'])->middleware('permission:manage_bal_groups')->name('bal.groups.store');
     Route::get('/bal-pravruti/groups/{group}', [BalGroupController::class, 'show'])->middleware('permission:access_bal_pravruti')->name('bal.groups.show');
     Route::get('/bal-pravruti/completions', [BalCompletionController::class, 'index'])->middleware('permission:submit_bal_completion')->name('bal.completions.index');
+    Route::get('/bal-pravruti/groups/{group}/families/search', [BalCompletionController::class, 'searchFamilies'])->middleware('permission:submit_bal_completion')->name('bal.families.search');
     Route::post('/bal-pravruti/groups/{group}/completions', [BalCompletionController::class, 'store'])->middleware('permission:submit_bal_completion')->name('bal.completions.store');
     Route::get('/bal-pravruti/analysis', BalAnalysisController::class)->middleware('permission:view_bal_analysis')->name('bal.analysis');
 
     Route::get('/monitoring/analysis', AnalysisController::class)->middleware('permission:view_reports_analysis')->name('monitoring.analysis');
     Route::get('/monitoring/reports', [ReportController::class, 'index'])->middleware('permission:view_reports_analysis')->name('monitoring.reports');
-    Route::get('/monitoring/reports/export', [ReportController::class, 'export'])->middleware('permission:view_reports_analysis')->name('monitoring.reports.export');
+    Route::get('/monitoring/reports/export', [ReportController::class, 'export'])->middleware(['permission:view_reports_analysis', 'throttle:12,1'])->name('monitoring.reports.export');
 
     Route::get('/support/announcements', [AnnouncementController::class, 'index'])->middleware('permission:view_announcements')->name('support.announcements.index');
     Route::post('/support/announcements', [AnnouncementController::class, 'store'])->middleware('permission:manage_announcements')->name('support.announcements.store');

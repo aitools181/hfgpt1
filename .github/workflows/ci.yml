@@ -34,6 +34,14 @@ jobs:
         run: python3 scripts/static_integrity_check.py
       - name: Web watchdog behavior
         run: scripts/test_web_watchdog.sh
+      - name: Runtime healthcheck behavior
+        run: scripts/test_runtime_healthchecks.sh
+      - name: Bootstrap fail-fast validation
+        run: scripts/test_bootstrap_validation.sh
+      - name: Background worker/scheduler self-healing
+        run: scripts/test_background_supervisor.sh
+      - name: 100k-row streaming import safety
+        run: php scripts/test_tabular_streaming.php
       - name: Validate Composer manifest
         run: composer validate --strict --no-check-lock
       - name: Install PHP dependencies
@@ -121,25 +129,125 @@ jobs:
             exit 1
           fi
 
-          # Verify PID-supervisor -> container exit -> restart policy -> recovery.
-          web_id=$(docker compose ps -q web)
-          before=$(docker inspect "$web_id" --format '{{.RestartCount}}')
-          docker compose exec -T web sh -c 'pkill -TERM php-fpm || true' || true
-
-          recovered=0
-          for i in $(seq 1 60); do
-            web_id=$(docker compose ps -q web)
-            after=$(docker inspect "$web_id" --format '{{.RestartCount}}' 2>/dev/null || echo 0)
-            if [ "$after" -gt "$before" ] && docker compose exec -T web curl -fsS http://127.0.0.1/up >/dev/null 2>&1; then
-              echo "web auto-restart recovered: restart_count $before -> $after"
-              recovered=1
+          # Start background services too and verify their init:true-aware health checks.
+          docker compose up -d worker scheduler
+          background_healthy=0
+          for i in $(seq 1 45); do
+            worker_status=$(docker inspect "$(docker compose ps -q worker)" --format '{{.State.Health.Status}}' 2>/dev/null || true)
+            scheduler_status=$(docker inspect "$(docker compose ps -q scheduler)" --format '{{.State.Health.Status}}' 2>/dev/null || true)
+            if [ "$worker_status" = healthy ] && [ "$scheduler_status" = healthy ]; then
+              echo "worker and scheduler healthchecks are healthy"
+              background_healthy=1
               break
             fi
             sleep 2
           done
-          if [ "$recovered" -ne 1 ]; then
+          if [ "$background_healthy" -ne 1 ]; then
             docker compose ps
-            docker compose logs --no-color --tail=250 web db redis
+            docker compose logs --no-color --tail=250 worker scheduler
+            exit 1
+          fi
+
+          # A queue/scheduler child exit must be recovered inside the same
+          # container. This prevents intentional queue recycling or transient
+          # dependency errors from presenting as a stopped Compose service.
+          for service in worker scheduler; do
+            service_id=$(docker compose ps -q "$service")
+            restart_before_bg=$(docker inspect "$service_id" --format '{{.RestartCount}}')
+            old_child=$(docker compose exec -T "$service" cat "/run/happy-family/$service.pid" | tr -d '\r')
+            docker compose exec -T "$service" sh -c "kill -KILL \$(cat /run/happy-family/$service.pid)" || true
+            child_recovered=0
+            for i in $(seq 1 45); do
+              new_child=$(docker compose exec -T "$service" cat "/run/happy-family/$service.pid" 2>/dev/null | tr -d '\r' || true)
+              restart_now_bg=$(docker inspect "$service_id" --format '{{.RestartCount}}' 2>/dev/null || echo -1)
+              if [ -n "$new_child" ] && [ "$new_child" != "$old_child" ] && [ "$restart_now_bg" = "$restart_before_bg" ] && docker compose exec -T "$service" /usr/local/bin/happy-family-healthcheck "$service" >/dev/null 2>&1; then
+                echo "$service child recovered in-container: $old_child -> $new_child"
+                child_recovered=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$child_recovered" -ne 1 ]; then
+              docker compose ps
+              docker compose logs --no-color --tail=250 "$service"
+              exit 1
+            fi
+          done
+
+          # Redis is queue-only for web availability. Stopping Redis must not
+          # make the web liveness probe fail or restart the web container.
+          web_id_before_redis=$(docker compose ps -q web)
+          web_restarts_before_redis=$(docker inspect "$web_id_before_redis" --format '{{.RestartCount}}')
+          docker compose stop redis
+          sleep 3
+          docker compose exec -T web /usr/local/bin/happy-family-healthcheck web
+          docker compose exec -T web curl -fsS http://127.0.0.1/health/live >/dev/null
+          web_restarts_after_redis=$(docker inspect "$web_id_before_redis" --format '{{.RestartCount}}')
+          test "$web_restarts_after_redis" = "$web_restarts_before_redis"
+          docker compose start redis
+          redis_healthy=0
+          for i in $(seq 1 30); do
+            redis_status=$(docker inspect "$(docker compose ps -q redis)" --format '{{.State.Health.Status}}' 2>/dev/null || true)
+            if [ "$redis_status" = healthy ]; then redis_healthy=1; break; fi
+            sleep 1
+          done
+          test "$redis_healthy" -eq 1
+
+          # A single PHP-FPM master crash must recover inside the same web
+          # container without a public outage or Docker-level restart.
+          web_id=$(docker compose ps -q web)
+          restart_before=$(docker inspect "$web_id" --format '{{.RestartCount}}')
+          old_fpm_pid=$(docker compose exec -T web cat /run/happy-family/php-fpm.pid | tr -d '\r')
+          docker compose exec -T web sh -c 'kill -KILL "$(cat /run/happy-family/php-fpm.pid)"' || true
+
+          in_container_recovered=0
+          for i in $(seq 1 45); do
+            new_fpm_pid=$(docker compose exec -T web cat /run/happy-family/php-fpm.pid 2>/dev/null | tr -d '\r' || true)
+            restart_now=$(docker inspect "$web_id" --format '{{.RestartCount}}' 2>/dev/null || echo -1)
+            if [ -n "$new_fpm_pid" ] && [ "$new_fpm_pid" != "$old_fpm_pid" ] && [ "$restart_now" = "$restart_before" ] && docker compose exec -T web /usr/local/bin/happy-family-healthcheck web >/dev/null 2>&1; then
+              echo "PHP-FPM recovered inside web container: pid $old_fpm_pid -> $new_fpm_pid"
+              in_container_recovered=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$in_container_recovered" -ne 1 ]; then
+            docker compose ps
+            docker compose logs --no-color --tail=300 web
+            exit 1
+          fi
+
+          # Exhaust the bounded in-container recovery budget. The supervisor
+          # must then exit and Docker restart:always must bring the service back.
+          for crash in $(seq 2 6); do
+            current_id=$(docker compose ps -q web)
+            [ "$current_id" = "$web_id" ] || break
+            current_pid=$(docker compose exec -T web cat /run/happy-family/php-fpm.pid 2>/dev/null | tr -d '\r' || true)
+            [ -n "$current_pid" ] || break
+            docker compose exec -T web sh -c 'kill -KILL "$(cat /run/happy-family/php-fpm.pid)"' || true
+            if [ "$crash" -lt 6 ]; then
+              for i in $(seq 1 30); do
+                next_pid=$(docker compose exec -T web cat /run/happy-family/php-fpm.pid 2>/dev/null | tr -d '\r' || true)
+                [ -n "$next_pid" ] && [ "$next_pid" != "$current_pid" ] && break
+                sleep 1
+              done
+            fi
+          done
+
+          docker_recovered=0
+          for i in $(seq 1 90); do
+            web_id_now=$(docker compose ps -q web)
+            restart_after=$(docker inspect "$web_id_now" --format '{{.RestartCount}}' 2>/dev/null || echo 0)
+            if [ "$restart_after" -gt "$restart_before" ] && docker compose exec -T web /usr/local/bin/happy-family-healthcheck web >/dev/null 2>&1; then
+              echo "Docker auto-restart recovered web: restart_count $restart_before -> $restart_after"
+              docker_recovered=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$docker_recovered" -ne 1 ]; then
+            docker compose ps
+            docker compose logs --no-color --tail=350 web db redis
             exit 1
           fi
 

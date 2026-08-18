@@ -2,7 +2,7 @@
 
 Production-oriented cumulative source package implementing the uploaded **SMVS Happy Family Project SRS Version 3.0** and **Full Portal Wireframe Version 2.0**.
 
-Current release: **1.0.4 - Password Reset RBAC + Full Re-test Hardening (Phases 0-7 + stabilization)**
+Current release: **1.0.9 - Mobile App-Style Responsive UI + v1.0.8 Failure Hardening (Phases 0-7 cumulative)**
 
 ## What is included
 
@@ -18,7 +18,7 @@ Current release: **1.0.4 - Password Reset RBAC + Full Re-test Hardening (Phases 
 ### Registration and imports
 
 - SMVS Global Family/Member import using Family ID as primary reference and Member ID as secondary reference
-- CSV, TSV and XLSX import; streaming CSV/TSV path for large files and a dedicated Redis `imports` queue so large imports do not block web requests
+- CSV, TSV and XLSX import; streaming/bounded readers plus a dedicated Redis `imports` queue so large imports do not block web requests
 - Sampark Area/Society import
 - Manual Sankalp Family registration and audited Family/Member correction editing
 - Manual and Family-ID based Sankalp Karyakar nomination
@@ -38,6 +38,16 @@ Current release: **1.0.4 - Password Reset RBAC + Full Re-test Hardening (Phases 
 - Sampark Area/Society assignment
 - target creation and progress calculation
 
+### Mobile application experience
+
+- sticky mobile app bar with compact page title and user/menu access
+- role-aware bottom navigation with active-state highlighting
+- More menu as a mobile bottom sheet with the complete permitted navigation catalog
+- app-style stacked record cards for all data tables on phones; desktop tables remain intact
+- safe-area support for iPhone/Android browser chrome and home-screen standalone display
+- touch-sized controls, single-column mobile form flow, mobile completion bottom sheet and overflow-safe content
+- PWA manifest/theme metadata and application icons for supported home-screen presentation
+
 ### Field execution
 
 - responsive/mobile My Target workflow
@@ -55,7 +65,7 @@ Current release: **1.0.4 - Password Reset RBAC + Full Re-test Hardening (Phases 
 - Gender/Category filters
 - Zone/Center leaderboards and target-vs-completed analysis
 - all ten minimum SRS reports
-- CSV exports
+- bounded report previews and lazy/streamed CSV exports isolated in a dedicated PHP-FPM pool
 - detailed Activity/Audit Log filters
 
 ### Bal Pravruti
@@ -178,6 +188,8 @@ The SRS contains several internal ambiguities (for example BN Karyalay permissio
 Start with:
 
 - `docs/FINAL_HANDOFF.md`
+- `docs/V1_0_8_FAILURE_PREVENTION_AUDIT.md`
+- `docs/V1_0_8_VALIDATION.md`
 - `docs/FINAL_ACCEPTANCE_MATRIX.md`
 - `docs/REQUIREMENT_TRACEABILITY.md`
 - `docs/DEPLOYMENT_COOLIFY.md`
@@ -193,12 +205,15 @@ Start with:
 
 The offline environment used to assemble and audit this release did not provide a Composer binary, Docker CLI or external dependency-network access. The source was re-audited with PHP syntax checks, route/permission/static checks, TypeScript/TSX parser/transpile checks using the locally available TypeScript compiler with `--noCheck`, manifest/config parsing, pure-PHP domain checks and release-integrity verification. Real dependency installation, Laravel/PostgreSQL runtime tests, the actual Vite production build and Docker image/runtime validation remain configured in GitHub CI and must be green before production sign-off. See `docs/FULL_CODE_AUDIT.md`.
 
-### Runtime health
+### Runtime health and self-healing
 
-- `/up` - dependency-light Laravel liveness used internally by Docker/Coolify health checks and the self-healing watchdog.
-- `/health/live` - operator-facing application liveness endpoint.
-- `/health/ready` - PostgreSQL, Redis/cache and required-schema readiness diagnostic.
-- The web supervisor checks `/up` every 10 seconds after a 30-second grace period. Three consecutive failures make the web container exit non-zero; `restart: unless-stopped` then restarts it automatically.
+- `/up` - dependency-light Laravel liveness.
+- `/health/live` - operator-facing application liveness.
+- `/health/ready` - PostgreSQL, file cache, Redis read/write, schema, writable storage and free-disk readiness.
+- Docker/Coolify health checks supervised PIDs plus direct Nginx, dedicated FPM ping and isolated Laravel liveness.
+- Nginx/PHP-FPM single failures or live-but-unresponsive states are recovered inside the web container first. Repeated unrecoverable failure escalates to Docker `restart: always`.
+- Queue worker and scheduler use persistent in-container supervisors so child recycling/transient crashes do not stop their Compose services.
+- Web sessions/cache are file based, so a temporary Redis queue outage does not intentionally take down normal portal browsing.
 
 For private GitHub repositories, grant Coolify repository access through a GitHub App or deploy key before redeploying.
 

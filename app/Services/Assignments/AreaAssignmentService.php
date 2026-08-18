@@ -74,6 +74,6 @@ class AreaAssignmentService
             }
 
             return $record;
-        });
+        }, 3);
     }
 }

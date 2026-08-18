@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.0.9 - Mobile app-style responsive UI - 2026-08-18
+
+- Reworked the authenticated portal shell for phone/tablet use with a sticky mobile app bar, role-aware bottom navigation and a full-screen-safe More menu/bottom sheet.
+- Preserved desktop independent sidebar/content scrolling and active-route highlighting while removing the old mobile chip-style navigation.
+- Added safe-area handling for modern iPhone/Android devices, larger touch targets, 16px mobile form inputs, responsive action buttons and mobile bottom-sheet completion modal behavior.
+- Converted all 23 data tables into app-style stacked record cards on small screens using semantic header-derived labels; desktop/tablet table presentation remains unchanged.
+- Added contained horizontal table wrappers for intermediate/tablet widths so wide data never forces the whole page to scroll sideways.
+- Improved the login screen into a mobile-first app entry surface with touch-friendly credential fields and secure sign-in affordances.
+- Added PWA presentation metadata, manifest and application icons so supported mobile browsers can present the portal with native-app-like standalone chrome when added to the home screen.
+- Added responsive CSS safeguards for two-column desktop form fragments, action rows, safe-area padding, small-screen modals, reduced-motion users and long-content overflow.
+- Re-ran PHP/static-integrity/config/CSS/JSX-syntax/mobile-coverage checks; runtime failure-containment behavior from v1.0.8 remains unchanged.
+
+## 1.0.8 - Failure containment, scale hardening and self-healing - 2026-08-18
+
+- Removed the remaining high-memory report paths: report previews are capped at 500 rows and CSV exports stream database rows lazily instead of materializing complete result sets in PHP memory.
+- Isolated long CSV exports in a dedicated PHP-FPM pool so report traffic cannot starve normal portal requests.
+- Reworked CSV/TSV/XLSX imports to stream rows, added XLSX zip-bomb/row/cell/shared-string limits, and retained queued retry/idempotency behavior.
+- Added production query-path indexes for Groups, Families, Targets, Home Visits, inactivity processing, imports and audit lookup.
+- Reworked inactivity scanning into bounded batches and removed several N+1/repeated dashboard calculations.
+- Added on-demand search endpoints/bounded option lists for large Karyakar/Family/Group/Target/Bal assignment catalogs.
+- Changed web/session/cache availability so normal authenticated HTTP traffic uses persistent file sessions/cache and does not fail merely because queue Redis is temporarily unavailable.
+- Added Redis write-capability verification to deep readiness, so `noeviction` max-memory exhaustion is detected before an import enqueue becomes a generic application error.
+- Added explicit memory/PID ceilings and Docker JSON log rotation for every long-running Compose service, plus conservative PostgreSQL/Redis runtime limits.
+- Added explicit 65,535 file-descriptor limits for all runtime services to avoid low inherited `nofile` ceilings under sustained HTTP/database/socket activity.
+- Increased production headroom to 1280 MB web, 448 MB worker and 768 MB PostgreSQL defaults while keeping PHP request/job memory bounded below the container limits.
+- Added dedicated PHP-FPM pools for control/ping, long report export and isolated Laravel liveness; normal interactive pool is explicitly sized/recycled.
+- Web supervisor now recovers an exited PHP-FPM or Nginx master inside the same container first, with bounded restart budget and backoff; repeated unrecoverable failure escalates to Docker `restart: always`.
+- Added direct Nginx and FPM control probes so a process that is still alive but no longer responsive is detected and recycled, not left as a permanently `Running` but unusable container.
+- Laravel watchdog now uses an isolated liveness pool and never treats PostgreSQL/Redis dependency failure or normal interactive worker saturation as a reason to kill the web container.
+- Queue worker and scheduler now run behind persistent in-container supervisors. Intentional queue recycling, transient dependency errors or a child crash respawn the child without stopping the Compose service.
+- Worker/scheduler startup now waits for the migrated, healthy web service so background jobs cannot race application migrations during a new deployment.
+- Runtime supervisor/background log writes are best-effort and rotated, preventing a full/read-only diagnostic log from becoming an availability failure; Nginx logs now go to stdout/stderr under Docker log rotation rather than unbounded container files.
+- Added `PGCONNECT_TIMEOUT`, PostgreSQL statement/idle-transaction timeouts and deployment dependency retries to bound network/database stalls and reduce transient build failures.
+- Added login/import/report-export throttles to reduce accidental or abusive resource bursts.
+- Hardened Docker builds with registry/install retries and future support for `composer.lock` / `package-lock.json` when present.
+- Added/expanded production host preflight, runtime diagnosis, web/background supervisor simulations, 100k-row streaming import checks, CI Compose fault injection and release integrity gates.
+
+## 1.0.7 - Runtime failure audit and false-exit fix - 2026-08-18
+
+- Fixed a confirmed v1.0.6 false-exit path: three short `/up` failures could intentionally terminate an otherwise running web container while PHP-FPM was merely busy/temporarily starved.
+- Changed the HTTP watchdog to soft-recover PHP-FPM workers first (SIGUSR2) and reserve Docker-level restart for persistent failure after repeated recovery attempts.
+- Increased watchdog grace/threshold defaults so normal transient load cannot rapidly trip a restart.
+- Added a direct Nginx `__container_health` endpoint and PID-aware runtime healthcheck so Docker/Coolify liveness does not compete for an application PHP-FPM worker.
+- Fixed worker/scheduler healthchecks that incorrectly inspected `/proc/1/cmdline` while `init: true` makes PID 1 the init process.
+- Added explicit PHP-FPM pool limits, worker recycling, slow-request logging and a hard request timeout to reduce worker starvation/memory-leak accumulation.
+- Added cgroup OOM/memory/load/disk snapshots immediately before unrecoverable web exits.
+- Fixed CI restart testing to kill PHP-FPM by its supervised PID instead of relying on `pkill`, and added worker/scheduler health integration coverage.
+- Added host-side runtime diagnosis tooling for restart policy, restart count, exit code, OOMKilled state, health history, logs and Docker events.
+
 ## 1.0.6 - Self-healing web watchdog - 2026-08-16
 
 - Added an internal HTTP watchdog that exercises the complete Nginx -> PHP-FPM -> Laravel path through Laravel's dependency-light `/up` endpoint.

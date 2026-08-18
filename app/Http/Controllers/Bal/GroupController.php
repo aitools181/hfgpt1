@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Bal;
 use App\Http\Controllers\Controller;
 use App\Models\BalGroup;
 use App\Services\Bal\BalPravrutiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,14 +16,15 @@ class GroupController extends Controller
     public function index(Request $request, BalPravrutiService $service): Response
     {
         $groups = $service->groupQuery($request->user())
-            ->with(['center:id,name,code', 'area:id,name', 'society:id,name', 'sanchalak:id,full_name,gender,category,mobile', 'children.member:id,family_id,name,gender,age', 'supervisors.user:id,name'])
-            ->withCount(['completionReports'])
-            ->orderBy('group_code')->get();
-
-        $options = $request->user()->hasPermission('manage_bal_groups') ? $service->creationOptions($request->user()) : null;
-
-        return Inertia::render('bal/groups', [
-            'groups' => $groups->map(fn (BalGroup $group) => [
+            ->with(['center:id,name,code', 'area:id,name', 'society:id,name', 'sanchalak:id,full_name,gender,category,mobile', 'supervisors.user:id,name'])
+            ->withCount([
+                'children as active_children_count' => fn ($q) => $q->where('status', 'active'),
+                'completionReports',
+            ])
+            ->orderBy('group_code')
+            ->paginate(100)
+            ->withQueryString()
+            ->through(fn (BalGroup $group) => [
                 'id' => $group->id,
                 'group_code' => $group->group_code,
                 'status' => $group->status,
@@ -30,12 +32,35 @@ class GroupController extends Controller
                 'area' => $group->area,
                 'society' => $group->society,
                 'sanchalak' => $group->sanchalak,
-                'children_count' => $group->children->where('status', 'active')->count(),
+                'children_count' => (int) $group->active_children_count,
                 'completion_reports_count' => $group->completion_reports_count,
                 'supervisors' => $group->supervisors->where('status', 'active')->map(fn ($s) => ['role_slug' => $s->role_slug, 'user' => $s->user])->values(),
-            ])->values(),
+            ]);
+
+        $options = $request->user()->hasPermission('manage_bal_groups') ? $service->creationOptions($request->user()) : null;
+
+        return Inertia::render('bal/groups', [
+            'groups' => $groups,
             'options' => $options ? $this->serializeCreationOptions($options) : null,
             'canManage' => $request->user()->hasPermission('manage_bal_groups'),
+        ]);
+    }
+
+    public function searchOptions(Request $request, BalPravrutiService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'center_id' => ['required', 'integer', 'exists:centers,id'],
+            'type' => ['required', 'string', 'in:child,sanchalak,nirdeshak,nirikshak'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        return response()->json([
+            'results' => $service->searchCreationOptions(
+                $request->user(),
+                (int) $data['center_id'],
+                $data['type'],
+                (string) ($data['q'] ?? ''),
+            ),
         ]);
     }
 
@@ -63,8 +88,8 @@ class GroupController extends Controller
                 'sanchalak:id,full_name,gender,category,mobile,user_id', 'sanchalakUser:id,name,email',
                 'children' => fn ($q) => $q->with('member.family:id,center_id,external_family_id,manual_reference,head_name')->orderBy('position'),
                 'supervisors.user:id,name,email',
-                'completionReports' => fn ($q) => $q->with(['society:id,name', 'family:id,external_family_id,manual_reference,head_name', 'submittedBy:id,name'])->orderByDesc('completion_date')->orderByDesc('id'),
-            ])->firstOrFail();
+                'completionReports' => fn ($q) => $q->with(['society:id,name', 'family:id,external_family_id,manual_reference,head_name', 'submittedBy:id,name'])->orderByDesc('completion_date')->orderByDesc('id')->limit(200),
+            ])->withCount('completionReports')->firstOrFail();
 
         return Inertia::render('bal/group-detail', ['group' => $group]);
     }
@@ -75,24 +100,6 @@ class GroupController extends Controller
             'centers' => $options['centers'],
             'areas' => $options['areas'],
             'societies' => $options['societies'],
-            'children' => $options['children']->map(fn ($member) => [
-                'id' => $member->id,
-                'center_id' => $member->family?->center_id,
-                'name' => $member->name,
-                'gender' => $member->gender,
-                'age' => $member->age,
-                'family_reference' => $member->family?->external_family_id ?? $member->family?->manual_reference,
-                'family_head' => $member->family?->head_name,
-            ])->values(),
-            'sanchalaks' => $options['sanchalaks']->map(fn ($k) => [
-                'id' => $k->id, 'center_id' => $k->center_id, 'full_name' => $k->full_name,
-                'gender' => $k->gender, 'category' => $k->category, 'user_id' => $k->user_id,
-            ])->values(),
-            'supervisors' => $options['supervisors']->map(fn ($user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'roles' => $user->roles->map(fn ($role) => ['slug' => $role->slug, 'center_id' => $role->pivot->center_id])->values(),
-            ])->values(),
         ];
     }
 }

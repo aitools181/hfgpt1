@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Bal;
 use App\Http\Controllers\Controller;
 use App\Models\BalCompletionReport;
 use App\Models\BalGroup;
+use App\Models\Family;
 use App\Services\Bal\BalPravrutiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,6 +27,38 @@ class CompletionController extends Controller
         return Inertia::render('bal/completions', [
             'reports' => $reports,
             'options' => $service->completionOptions($request->user()),
+        ]);
+    }
+
+    public function searchFamilies(Request $request, BalGroup $group): JsonResponse
+    {
+        abort_unless($request->user()->hasRole('sanchalak'), 403, 'Only Sanchalak users can search Bal Pravruti Families.');
+        abort_unless((int) $group->sanchalak_user_id === (int) $request->user()->id, 403, 'This Bal Group is outside your assigned scope.');
+        abort_unless($group->status === 'active', 422, 'Family search is only available for an active Bal Group.');
+
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'society_id' => ['nullable', 'integer'],
+        ]);
+        $search = trim((string) ($data['q'] ?? ''));
+
+        $query = Family::query()->where('center_id', $group->center_id)->where('status', 'active');
+        if (! empty($data['society_id'])) {
+            $query->where('society_id', (int) $data['society_id']);
+        }
+        if ($search !== '') {
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $search);
+            $query->where(function ($q) use ($escaped): void {
+                $q->where('head_name', 'ilike', "%{$escaped}%")
+                    ->orWhere('external_family_id', 'ilike', "%{$escaped}%")
+                    ->orWhere('manual_reference', 'ilike', "%{$escaped}%");
+            });
+        }
+
+        return response()->json([
+            'families' => $query->orderBy('head_name')->limit(30)->get([
+                'id', 'center_id', 'society_id', 'external_family_id', 'manual_reference', 'head_name',
+            ]),
         ]);
     }
 

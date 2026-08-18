@@ -54,7 +54,7 @@ class GroupAssignmentService
             ], centerId: $center->id);
 
             return $group->fresh();
-        });
+        }, 3);
     }
 
     public function assignFamily(SankalpGroup $group, int $familyId, string $type, User $actor, string $source = 'admin', ?string $note = null): GroupFamilyAssignment
@@ -128,7 +128,7 @@ class GroupAssignmentService
             ], $note, centerId: $lockedGroup->center_id);
 
             return $assignment;
-        });
+        }, 3);
     }
 
 
@@ -184,7 +184,7 @@ class GroupAssignmentService
             ], $data['note'] ?? null, centerId: $group->center_id);
 
             return $report;
-        });
+        }, 3);
     }
 
     public function reviewRemainingFamilyReport(RemainingFamilyReport $report, string $decision, User $actor, ?string $reviewNote = null): RemainingFamilyReport
@@ -214,7 +214,7 @@ class GroupAssignmentService
 
             $this->audit->record('remaining_family_report', 'family_report_reviewed', RemainingFamilyReport::class, (string) $report->id, ['status' => 'pending'], ['status' => $decision], $reviewNote, centerId: $report->group->center_id);
             return $report;
-        });
+        }, 3);
     }
 
     public function activate(SankalpGroup $group, User $actor): SankalpGroup
@@ -241,7 +241,7 @@ class GroupAssignmentService
             $group->update(['status' => 'active', 'activated_at' => now(), 'closed_at' => null]);
             $this->audit->record('groups', 'group_activated', SankalpGroup::class, (string) $group->id, $old, ['status' => 'active', 'activated_at' => $group->activated_at?->toIso8601String()], centerId: $group->center_id);
             return $group;
-        });
+        }, 3);
     }
 
     public function transferFamily(GroupFamilyAssignment $assignment, SankalpGroup $destination, string $newType, User $actor, string $reason): GroupFamilyAssignment
@@ -331,7 +331,7 @@ class GroupAssignmentService
             ], $reason, centerId: $sourceGroup->center_id);
 
             return $new;
-        });
+        }, 3);
     }
 
     /** @param array<int,int|string> $used */

@@ -5,7 +5,7 @@ import AppLayout from '../../layouts/app-layout';
 type Option = { id:number; name?:string; code?:string; group_code?:string; full_name?:string };
 type Filters = { center_id:number|null; group_id:number|null; karyakar_id:number|null; area_id:number|null; gender:string|null; category:string|null; status:string|null; date_from:string|null; date_to:string|null; female_scope_locked:boolean };
 type Props = {
-    report: { type:string; title:string; columns:Record<string,string>; rows:Record<string,any>[]; filters:Filters };
+    report: { type:string; title:string; columns:Record<string,string>; rows:Record<string,any>[]; filters:Filters; truncated:boolean; row_limit:number };
     reportTypes: Record<string,string>;
     options: { centers:Option[]; groups:Option[]; karyakars:Option[]; areas:Option[]; categories:string[] };
 };
@@ -29,7 +29,7 @@ export default function Reports({report,reportTypes,options}:Props){
             </form>
         </section>
         {report.filters.female_scope_locked && <div className="mb-5 rounded-xl border border-fuchsia-200 bg-fuchsia-50 p-4 text-sm font-semibold text-fuchsia-900">BN Karyalay gender analysis is fixed to Female.</div>}
-        <section className="hf-card overflow-hidden"><div className="flex items-center justify-between gap-3 border-b border-[#eadff0] p-4"><div><div className="font-extrabold">{report.title}</div><div className="text-xs text-[#75667a]">{report.rows.length} row(s)</div></div><a href={exportHref} className="hf-btn hf-btn-secondary inline-flex items-center gap-2"><Download size={15}/> CSV</a></div><div className="overflow-x-auto"><table className="hf-table"><thead><tr>{Object.values(report.columns).map((label)=><th key={label}>{label}</th>)}</tr></thead><tbody>{report.rows.length===0?<tr><td colSpan={Object.keys(report.columns).length}>No data found for the selected filters.</td></tr>:report.rows.map((row,index)=><tr key={index}>{Object.keys(report.columns).map(key=><td key={key}>{format(row[key])}</td>)}</tr>)}</tbody></table></div></section>
+        <section className="hf-card overflow-hidden"><div className="flex items-center justify-between gap-3 border-b border-[#eadff0] p-4"><div><div className="font-extrabold">{report.title}</div><div className="text-xs text-[#75667a]">{report.truncated ? `Showing first ${report.row_limit} rows - use CSV for the full dataset` : `${report.rows.length} row(s)`}</div></div><a href={exportHref} className="hf-btn hf-btn-secondary inline-flex items-center gap-2"><Download size={15}/> CSV</a></div><div className="overflow-x-auto"><div className="hf-table-scroll"><table className="hf-table hf-mobile-table"><thead><tr>{Object.values(report.columns).map((label)=><th key={label}>{label}</th>)}</tr></thead><tbody>{report.rows.length===0?<tr><td colSpan={Object.keys(report.columns).length}>No data found for the selected filters.</td></tr>:report.rows.map((row,index)=><tr key={index}>{Object.keys(report.columns).map(key=><td key={key}>{format(row[key])}</td>)}</tr>)}</tbody></table></div></div></section>
     </AppLayout>
 }
 function Select({label,children,...props}:any){return <div><label className="hf-label">{label}</label><select className="hf-input" {...props}>{children}</select></div>}

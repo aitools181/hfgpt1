@@ -59,8 +59,14 @@ class RegistrationImportService
                         );
                     }
                     $wasNew ? $created++ : $updated++;
-                });
-            } catch (Throwable $e) { $skipped++; if (count($errors) < 100) $errors[] = ['row' => $index + 2, 'message' => $e->getMessage()]; }
+                }, 3);
+            } catch (Throwable $e) {
+                if ($this->isInfrastructureFailure($e)) {
+                    throw $e;
+                }
+                $skipped++;
+                if (count($errors) < 100) $errors[] = ['row' => $index + 2, 'message' => mb_substr($e->getMessage(), 0, 1000)];
+            }
         }
         $batch->update(['status' => $errors === [] ? 'completed' : 'completed_with_errors', 'total_rows' => $total, 'created_rows' => $created, 'updated_rows' => $updated, 'skipped_rows' => $skipped, 'errors' => $errors ?: null, 'completed_at' => now()]);
     }
@@ -84,10 +90,40 @@ class RegistrationImportService
                         Society::query()->updateOrCreate(['center_id' => $batch->center_id, 'name' => $societyName], ['sampark_area_id' => $area->id, 'external_code' => $this->nullableString($row['society_code'] ?? null), 'status' => 'active']);
                     }
                     $wasNew ? $created++ : $updated++;
-                });
-            } catch (Throwable $e) { $skipped++; if (count($errors) < 100) $errors[] = ['row' => $index + 2, 'message' => $e->getMessage()]; }
+                }, 3);
+            } catch (Throwable $e) {
+                if ($this->isInfrastructureFailure($e)) {
+                    throw $e;
+                }
+                $skipped++;
+                if (count($errors) < 100) $errors[] = ['row' => $index + 2, 'message' => mb_substr($e->getMessage(), 0, 1000)];
+            }
         }
         $batch->update(['status' => $errors === [] ? 'completed' : 'completed_with_errors', 'total_rows' => $total, 'created_rows' => $created, 'updated_rows' => $updated, 'skipped_rows' => $skipped, 'errors' => $errors ?: null, 'completed_at' => now()]);
+    }
+
+    private function isInfrastructureFailure(Throwable $exception): bool
+    {
+        for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
+            $code = strtoupper((string) $current->getCode());
+            if (str_starts_with($code, '08') || in_array($code, ['57P01', '57P02', '57P03', '53300', '53400'], true)) {
+                return true;
+            }
+
+            $message = strtolower($current->getMessage());
+            foreach ([
+                'connection refused', 'connection reset', 'server closed the connection',
+                'could not connect to server', 'no connection to the server',
+                'terminating connection due to administrator command', 'too many clients',
+                'remaining connection slots are reserved', 'network is unreachable',
+            ] as $marker) {
+                if (str_contains($message, $marker)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function gender(mixed $value): ?string { $v = strtolower(trim((string) $value)); return in_array($v, ['m', 'male'], true) ? 'male' : (in_array($v, ['f', 'female'], true) ? 'female' : null); }

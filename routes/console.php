@@ -14,3 +14,6 @@ Artisan::command('happy-family:inactivity-check', function (InactivityService $s
 })->purpose('Create 4-day inactivity reminders and 7-day inactivity alerts');
 
 Schedule::command('happy-family:inactivity-check')->hourly()->withoutOverlapping();
+
+// Keep the failed-job table bounded so a long-running production instance does not grow indefinitely.
+Schedule::command('queue:prune-failed --hours=720')->dailyAt('02:20')->withoutOverlapping();

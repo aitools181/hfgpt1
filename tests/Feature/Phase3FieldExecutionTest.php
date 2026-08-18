@@ -214,6 +214,27 @@ class Phase3FieldExecutionTest extends TestCase
         $this->assertSame('escalated', InactivityEvent::query()->where('event_type', 'reminder')->firstOrFail()->status);
     }
 
+    public function test_bulk_inactivity_scan_creates_threshold_events_once_for_active_group_karyakars(): void
+    {
+        [$zone, $center, $area] = $this->context();
+        [, $field] = $this->fieldUser($zone, $center);
+        $partner = $this->approvedPartner($center);
+        [$group] = $this->activeGroup($center, $area, $field, $partner);
+        $group->update(['activated_at' => now()->subDays(8)]);
+
+        $service = app(InactivityService::class);
+        $first = $service->checkAll(now());
+        $this->assertSame(2, $first['reminders']);
+        $this->assertSame(2, $first['alerts']);
+        $this->assertSame(2, InactivityEvent::query()->where('event_type', 'reminder')->count());
+        $this->assertSame(2, InactivityEvent::query()->where('event_type', 'alert')->count());
+
+        $second = $service->checkAll(now()->addHour());
+        $this->assertSame(0, $second['reminders']);
+        $this->assertSame(0, $second['alerts']);
+        $this->assertSame(4, InactivityEvent::query()->count());
+    }
+
     public function test_new_home_visit_resolves_open_reminder_and_alert_history(): void
     {
         [$zone, $center, $area] = $this->context();

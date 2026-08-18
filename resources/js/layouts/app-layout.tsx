@@ -1,14 +1,46 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Activity, BarChart3, BellRing, Building2, FileText, Home, LogOut, Settings, ShieldCheck, Users, MapPinned, Upload, UserRoundCheck, UsersRound, Network, Map, Target, Baby, ClipboardCheck, Megaphone, CalendarDays, Library, MessageSquareQuote, PackageOpen, StickyNote, LifeBuoy, type LucideIcon } from 'lucide-react';
+import {
+    Activity,
+    BarChart3,
+    Baby,
+    BellRing,
+    Building2,
+    CalendarDays,
+    ChevronRight,
+    ClipboardCheck,
+    FileText,
+    Home,
+    Library,
+    LifeBuoy,
+    LogOut,
+    Map,
+    MapPinned,
+    Megaphone,
+    Menu,
+    MessageSquareQuote,
+    MoreHorizontal,
+    Network,
+    PackageOpen,
+    Settings,
+    ShieldCheck,
+    StickyNote,
+    Target,
+    Upload,
+    UserRoundCheck,
+    Users,
+    UsersRound,
+    X,
+    type LucideIcon,
+} from 'lucide-react';
 import type { PageProps } from '../types';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 const SIDEBAR_SCROLL_KEY = 'happy-family:desktop-sidebar-scroll';
 
-type NavItem = { label: string; href: string; icon: LucideIcon; permission?: string | null; permissionsAny?: string[]; roleSlugs?: string[] };
+type NavItem = { label: string; shortLabel?: string; href: string; icon: LucideIcon; permission?: string | null; permissionsAny?: string[]; roleSlugs?: string[] };
 
 const navigation: NavItem[] = [
-    { label: 'Dashboard', href: '/', icon: Home, permission: null },
+    { label: 'Dashboard', shortLabel: 'Home', href: '/', icon: Home, permission: null },
     { label: 'Zones', href: '/admin/zones', icon: MapPinned, permission: 'manage_zones' },
     { label: 'Centers', href: '/admin/centers', icon: Building2, permission: 'view_center' },
     { label: 'Users', href: '/admin/users', icon: Users, permissionsAny: ['manage_users', 'reset_user_passwords'] },
@@ -18,14 +50,14 @@ const navigation: NavItem[] = [
     { label: 'Groups', href: '/assignments/groups', icon: Network, permission: 'view_own_assignments' },
     { label: 'Area / Society', href: '/assignments/areas', icon: Map, permission: 'assign_area_society' },
     { label: 'Targets', href: '/assignments/targets', icon: Target, permission: 'assign_target' },
-    { label: 'My Target', href: '/field/my-target', icon: Target, permission: 'mark_home_visit', roleSlugs: ['karyakar', 'super_admin'] },
-    { label: 'Reminders / Alerts', href: '/field/reminders', icon: BellRing, permission: 'view_own_assignments', roleSlugs: ['karyakar', 'super_admin', 'bn_karyalay_admin', 'zonal_admin', 'center_admin', 'computer_op'] },
-    { label: 'Bal Dashboard', href: '/bal-pravruti', icon: Baby, permission: 'access_bal_pravruti' },
+    { label: 'My Target', shortLabel: 'Target', href: '/field/my-target', icon: Target, permission: 'mark_home_visit', roleSlugs: ['karyakar', 'super_admin'] },
+    { label: 'Reminders / Alerts', shortLabel: 'Alerts', href: '/field/reminders', icon: BellRing, permission: 'view_own_assignments', roleSlugs: ['karyakar', 'super_admin', 'bn_karyalay_admin', 'zonal_admin', 'center_admin', 'computer_op'] },
+    { label: 'Bal Dashboard', shortLabel: 'Bal', href: '/bal-pravruti', icon: Baby, permission: 'access_bal_pravruti' },
     { label: 'Bal Groups', href: '/bal-pravruti/groups', icon: UsersRound, permission: 'access_bal_pravruti' },
     { label: 'Bal Completion', href: '/bal-pravruti/completions', icon: ClipboardCheck, permission: 'submit_bal_completion', roleSlugs: ['sanchalak'] },
     { label: 'Bal Analysis', href: '/bal-pravruti/analysis', icon: BarChart3, permission: 'view_bal_analysis' },
     { label: 'Analysis', href: '/monitoring/analysis', icon: BarChart3, permission: 'view_reports_analysis' },
-    { label: 'Reports', href: '/monitoring/reports', icon: FileText, permission: 'view_reports_analysis' },
+    { label: 'Reports', shortLabel: 'Reports', href: '/monitoring/reports', icon: FileText, permission: 'view_reports_analysis' },
     { label: 'Announcements', href: '/support/announcements', icon: Megaphone, permission: 'view_announcements' },
     { label: 'Family Time', href: '/support/family-time', icon: CalendarDays, permission: 'view_family_time' },
     { label: 'Shared Content', href: '/support/content', icon: Library, permission: 'view_shared_content' },
@@ -37,6 +69,8 @@ const navigation: NavItem[] = [
     { label: 'Audit Logs', href: '/admin/audit-logs', icon: Activity, permission: 'view_audit_logs' },
     { label: 'Settings', href: '/admin/settings', icon: Settings, permission: 'manage_master_data' },
 ];
+
+const preferredMobileTabs = ['/', '/field/my-target', '/assignments/groups', '/monitoring/reports', '/bal-pravruti'];
 
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
     const page = usePage<PageProps>();
@@ -64,7 +98,20 @@ export default function AppLayout({ title, children }: { title: string; children
         .sort((a, b) => b.href.length - a.href.length)[0]?.href;
     const isActive = (href: string) => href === activeHref;
 
+    const mobileTabs = useMemo(() => {
+        const chosen = preferredMobileTabs
+            .map((href) => visibleNavigation.find((item) => item.href === href))
+            .filter((item): item is NavItem => Boolean(item));
+        for (const item of visibleNavigation) {
+            if (chosen.length >= 4) break;
+            if (!chosen.some((existing) => existing.href === item.href)) chosen.push(item);
+        }
+        return chosen.slice(0, 4);
+    }, [visibleNavigation]);
+
     const sidebarRef = useRef<HTMLElement | null>(null);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
     useLayoutEffect(() => {
         const sidebar = sidebarRef.current;
         if (!sidebar) return;
@@ -80,6 +127,37 @@ export default function AppLayout({ title, children }: { title: string; children
         }
     }, []);
 
+    useEffect(() => {
+        setMobileMenuOpen(false);
+    }, [page.url]);
+
+    // Add semantic labels before paint so desktop tables become readable mobile cards without a label flicker.
+    useLayoutEffect(() => {
+        document.querySelectorAll<HTMLTableElement>('.hf-mobile-table').forEach((table) => {
+            const headers = Array.from(table.querySelectorAll('thead th')).map((header) => header.textContent?.trim() ?? '');
+            table.querySelectorAll('tbody tr').forEach((row) => {
+                Array.from(row.children).forEach((cell, index) => {
+                    if (!(cell instanceof HTMLTableCellElement) || cell.colSpan > 1) return;
+                    cell.dataset.label = headers[index] ?? '';
+                });
+            });
+        });
+    });
+
+    useEffect(() => {
+        if (!mobileMenuOpen) return;
+        const oldOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setMobileMenuOpen(false);
+        };
+        window.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.body.style.overflow = oldOverflow;
+            window.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [mobileMenuOpen]);
+
     const rememberSidebarScroll = () => {
         const sidebar = sidebarRef.current;
         if (!sidebar) return;
@@ -89,6 +167,9 @@ export default function AppLayout({ title, children }: { title: string; children
             // Keep navigation functional even when sessionStorage is unavailable.
         }
     };
+
+    const userInitial = user.name.trim().charAt(0).toUpperCase() || 'U';
+    const moreActive = Boolean(activeHref && !mobileTabs.some((item) => item.href === activeHref));
 
     return (
         <div className="hf-shell lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:items-start lg:overflow-hidden">
@@ -122,8 +203,8 @@ export default function AppLayout({ title, children }: { title: string; children
                 </div>
             </aside>
 
-            <main className="min-w-0 lg:h-screen lg:overflow-y-auto lg:overscroll-contain">
-                <header className="border-b border-[#eadff0] bg-white/90 px-4 py-4 backdrop-blur md:px-8 flex items-center justify-between gap-4">
+            <main className="hf-main min-w-0 lg:h-screen lg:overflow-y-auto lg:overscroll-contain">
+                <header className="hf-desktop-header border-b border-[#eadff0] bg-white/90 px-4 py-4 backdrop-blur md:px-8 items-center justify-between gap-4">
                     <div>
                         <div className="text-xs font-semibold text-[#7b5f87]">SMVS Happy Family Portal</div>
                         <h1 className="text-xl font-extrabold text-[#351342]">{title}</h1>
@@ -131,18 +212,69 @@ export default function AppLayout({ title, children }: { title: string; children
                     <div className="flex items-center gap-2 text-xs font-semibold text-[#5d3b6a]"><ShieldCheck size={17}/> Role-scoped access</div>
                 </header>
 
-                <div className="p-4 md:p-8">
-                    <div className="mb-4 flex flex-wrap gap-2 lg:hidden">
-                        {visibleNavigation.map((item) => {
-                            const active = isActive(item.href);
-                            return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined} className={`hf-badge ${active ? '!bg-[#6a1b9a] !text-white' : ''}`}>{item.label}</Link>;
-                        })}
+                <header className="hf-mobile-appbar lg:hidden">
+                    <button type="button" className="hf-icon-btn" onClick={() => setMobileMenuOpen(true)} aria-label="Open navigation menu">
+                        <Menu size={22}/>
+                    </button>
+                    <div className="min-w-0 flex-1">
+                        <div className="hf-mobile-kicker">SMVS Happy Family</div>
+                        <h1 className="hf-mobile-title">{title}</h1>
                     </div>
+                    <button type="button" className="hf-avatar" onClick={() => setMobileMenuOpen(true)} aria-label="Open profile and menu">{userInitial}</button>
+                </header>
+
+                <div className="hf-page-content p-4 md:p-8">
                     {flash.success && <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{flash.success}</div>}
                     {flash.error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{flash.error}</div>}
                     {children}
                 </div>
             </main>
+
+            <nav className="hf-mobile-bottom-nav lg:hidden" aria-label="Primary mobile navigation">
+                {mobileTabs.map((item) => {
+                    const Icon = item.icon;
+                    const active = isActive(item.href);
+                    return <Link key={item.href} href={item.href} className={`hf-mobile-tab ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
+                        <span className="hf-mobile-tab-icon"><Icon size={21}/></span>
+                        <span>{item.shortLabel ?? item.label}</span>
+                    </Link>;
+                })}
+                <button type="button" className={`hf-mobile-tab ${mobileMenuOpen || moreActive ? 'is-active' : ''}`} onClick={() => setMobileMenuOpen(true)} aria-label="More navigation options">
+                    <span className="hf-mobile-tab-icon"><MoreHorizontal size={22}/></span>
+                    <span>More</span>
+                </button>
+            </nav>
+
+            {mobileMenuOpen && <div className="hf-mobile-menu-layer lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation menu">
+                <button type="button" className="hf-mobile-menu-backdrop" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation menu" />
+                <section className="hf-mobile-menu-sheet">
+                    <div className="hf-mobile-menu-handle" aria-hidden="true" />
+                    <div className="hf-mobile-menu-head">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="hf-avatar hf-avatar-large">{userInitial}</div>
+                            <div className="min-w-0">
+                                <div className="truncate font-extrabold text-[#351342]">{user.name}</div>
+                                <div className="truncate text-xs font-semibold text-[#7b6783]">{role?.name ?? 'User'} · {user.email}</div>
+                            </div>
+                        </div>
+                        <button type="button" className="hf-icon-btn" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation menu"><X size={22}/></button>
+                    </div>
+                    <div className="hf-mobile-menu-scroll">
+                        <div className="hf-mobile-menu-grid">
+                            {visibleNavigation.map((item) => {
+                                const Icon = item.icon;
+                                const active = isActive(item.href);
+                                return <Link key={item.href} href={item.href} className={`hf-mobile-menu-item ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
+                                    <span className="hf-mobile-menu-icon"><Icon size={20}/></span>
+                                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                                    <ChevronRight size={17} className="opacity-45"/>
+                                </Link>;
+                            })}
+                        </div>
+                        <Link href="/logout" method="post" as="button" className="hf-mobile-logout"><LogOut size={18}/> Logout</Link>
+                    </div>
+                </section>
+            </div>}
         </div>
     );
 }

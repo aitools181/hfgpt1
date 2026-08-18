@@ -13,6 +13,7 @@ use App\Models\Society;
 use App\Services\Assignments\GroupAssignmentService;
 use App\Services\Assignments\GroupRules;
 use App\Services\OrganizationalScope;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -48,12 +49,63 @@ class GroupController extends Controller
         return Inertia::render('assignments/groups', [
             'groups' => $query->latest()->paginate(25)->withQueryString(),
             'centers' => $scope->centers($request->user())->orderBy('name')->get(['id', 'name', 'code']),
-            'karyakars' => $request->user()->hasPermission('create_group')
-                ? Karyakar::query()->whereIn('center_id', $centerIds)->where('status', 'approved')->orderBy('full_name')->get(['id', 'center_id', 'full_name', 'gender', 'category', 'karyakar_reference'])
-                : collect(),
+            'karyakars' => [],
             'groupTypes' => GroupRules::TYPES,
             'canCreate' => $request->user()->hasPermission('create_group'),
             'filters' => $request->only(['search', 'center_id', 'group_type', 'status']),
+        ]);
+    }
+
+    public function searchKaryakars(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('create_group'), 403);
+        $data = $request->validate([
+            'center_id' => ['required', 'integer', 'exists:centers,id'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+        abort_unless($request->user()->canAccessCenterId((int) $data['center_id']), 403, 'Center is outside your permitted scope.');
+        $search = trim((string) ($data['q'] ?? ''));
+        $query = Karyakar::query()->where('center_id', (int) $data['center_id'])->where('status', 'approved');
+        if ($search !== '') {
+            $query->where(fn ($q) => $q->where('full_name', 'ilike', '%'.$search.'%')->orWhere('karyakar_reference', 'ilike', '%'.$search.'%'));
+        }
+        return response()->json([
+            'results' => $query->orderBy('full_name')->limit(75)->get(['id', 'center_id', 'full_name', 'gender', 'category', 'karyakar_reference']),
+        ]);
+    }
+
+    public function searchEligibleFamilies(Request $request, SankalpGroup $group): JsonResponse
+    {
+        $this->authorizeView($request, $group);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100']]);
+        $canAdminAssign = $request->user()->hasPermission('manage_fixed_families') || $request->user()->hasPermission('assign_transfer_families');
+        $linkedKaryakar = Karyakar::query()->where('user_id', $request->user()->id)->where('status', 'approved')->first();
+        $canSelectRemaining = $group->status === 'draft' && $linkedKaryakar
+            && $group->karyakarAssignments()->where('status', 'active')->where('karyakar_id', $linkedKaryakar->id)->exists();
+        abort_unless($canAdminAssign || $canSelectRemaining, 403, 'You cannot select Families for this Group.');
+
+        $query = Family::query()->where('center_id', $group->center_id)->where('status', 'active')
+            ->whereDoesntHave('groupAssignments', fn ($q) => $q->where('status', 'active'));
+        if (! $canAdminAssign) {
+            if ($group->society_id) {
+                $query->where('society_id', $group->society_id);
+            } elseif ($group->sampark_area_id) {
+                $query->where('sampark_area_id', $group->sampark_area_id);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+        $search = trim((string) ($data['q'] ?? ''));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search): void {
+                $q->where('head_name', 'ilike', '%'.$search.'%')
+                    ->orWhere('external_family_id', 'ilike', '%'.$search.'%')
+                    ->orWhere('manual_reference', 'ilike', '%'.$search.'%');
+            });
+        }
+
+        return response()->json([
+            'results' => $query->orderBy('head_name')->limit(75)->get(['id', 'external_family_id', 'manual_reference', 'head_name', 'head_mobile']),
         ]);
     }
 
@@ -88,18 +140,6 @@ class GroupController extends Controller
         $linkedKaryakar = Karyakar::query()->where('user_id', $request->user()->id)->where('status', 'approved')->first();
         $canSelectRemaining = $group->status === 'draft' && $linkedKaryakar && $group->karyakarAssignments->contains(fn ($a) => $a->karyakar_id === $linkedKaryakar->id);
 
-        $eligibleFamilyQuery = Family::query()->where('center_id', $group->center_id)->where('status', 'active')
-            ->whereDoesntHave('groupAssignments', fn ($q) => $q->where('status', 'active'));
-        if (! $canAdminAssign) {
-            if ($group->society_id) {
-                $eligibleFamilyQuery->where('society_id', $group->society_id);
-            } elseif ($group->sampark_area_id) {
-                $eligibleFamilyQuery->where('sampark_area_id', $group->sampark_area_id);
-            } else {
-                $eligibleFamilyQuery->whereRaw('1 = 0');
-            }
-        }
-
         return Inertia::render('assignments/group-detail', [
             'group' => $group,
             'composition' => [
@@ -111,7 +151,7 @@ class GroupController extends Controller
                 'slotsLeft' => max(0, 10 - $activeAssignments->count()),
                 'canActivate' => $activeAssignments->count() === 10 && in_array($activeAssignments->where('assignment_type', 'fixed')->count(), [5, 6], true) && in_array($activeAssignments->where('assignment_type', 'remaining')->count(), [4, 5], true),
             ],
-            'eligibleFamilies' => $eligibleFamilyQuery->orderBy('head_name')->limit(500)->get(['id', 'external_family_id', 'manual_reference', 'head_name', 'head_mobile']),
+            'eligibleFamilies' => [],
             'transferGroups' => SankalpGroup::query()->where('center_id', $group->center_id)->where('id', '!=', $group->id)->where('status', 'draft')
                 ->withCount(['familyAssignments as active_families_count' => fn ($q) => $q->where('status', 'active')])
                 ->orderBy('group_code')->get(['id', 'group_code', 'status']),

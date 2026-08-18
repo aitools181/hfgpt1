@@ -138,8 +138,8 @@ export default function MyTarget({ karyakar, groups, targets, badgeSummary, open
             </aside>
         </div>
 
-        {report && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
-            <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {report && <div className="hf-modal-layer fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true">
+            <div className="hf-modal-sheet w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <div className="hf-brand flex items-start justify-between gap-4 p-5 text-white"><div><div className="text-xs uppercase tracking-[.16em] opacity-80">Completion Report</div><h2 className="mt-1 text-2xl font-black">Happy Family message completed</h2></div><button className="rounded-full bg-white/15 p-2" onClick={() => setReport(null)} aria-label="Close"><X size={18}/></button></div>
                 <div className="p-5">
                     <div className="grid grid-cols-2 gap-3"><Mini label="Zone" value={report.zone || '-'}/><Mini label="Center" value={report.center || '-'}/><Mini label="My completed" value={report.completedFamilies}/><Mini label="Group pending" value={report.groupPending}/></div>

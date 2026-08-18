@@ -1,5 +1,5 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AppLayout from '../../layouts/app-layout';
 import type { PageProps } from '../../types';
 
@@ -24,14 +24,32 @@ type Props = {
     karyakars: Array<{ id: number; center_id: number; user_id: number | null; full_name: string; karyakar_reference: string }>;
     canManageUsers: boolean;
     canResetPasswords: boolean;
+    userSearch: string;
+    userListTruncated: boolean;
 };
 
-export default function Users({ users, roles, zones, centers, karyakars, canManageUsers, canResetPasswords }: Props) {
+export default function Users({ users, roles, zones, centers, karyakars, canManageUsers, canResetPasswords, userSearch, userListTruncated }: Props) {
     const page = usePage<PageProps>();
     const currentUserId = page.props.auth.user?.id;
     const f = useForm({ name: '', email: '', password: '', status: 'active', role_id: '', zone_id: '', center_id: '', karyakar_id: '' });
     const role = roles.find((r) => String(r.id) === String(f.data.role_id));
-    const eligibleKaryakars = karyakars.filter((k) => String(k.center_id) === String(f.data.center_id) && !k.user_id);
+    const [karyakarSearch, setKaryakarSearch] = useState('');
+    const [eligibleKaryakars, setEligibleKaryakars] = useState(karyakars);
+    useEffect(() => {
+        if (!f.data.center_id || !['karyakar', 'sanchalak'].includes(role?.slug ?? '')) { setEligibleKaryakars([]); return; }
+        const controller = new AbortController();
+        const timer = window.setTimeout(async () => {
+            try {
+                const params = new URLSearchParams({ center_id: String(f.data.center_id) });
+                if (karyakarSearch.trim()) params.set('q', karyakarSearch.trim());
+                const response = await fetch(`/admin/users/karyakars/search?${params.toString()}`, { headers: { Accept: 'application/json' }, credentials: 'same-origin', signal: controller.signal });
+                if (!response.ok) throw new Error('Karyakar search failed');
+                const body = await response.json();
+                setEligibleKaryakars(Array.isArray(body.results) ? body.results : []);
+            } catch (error: any) { if (error?.name !== 'AbortError') setEligibleKaryakars([]); }
+        }, 250);
+        return () => { window.clearTimeout(timer); controller.abort(); };
+    }, [f.data.center_id, role?.slug, karyakarSearch]);
 
     return <AppLayout title="User & Password Management">
         <Head title="Users" />
@@ -54,11 +72,13 @@ export default function Users({ users, roles, zones, centers, karyakars, canMana
                     <option value="">Center (if applicable)</option>{centers.map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
                 </select>
                 {['karyakar', 'sanchalak'].includes(role?.slug ?? '') && <div>
+                    <label className="hf-label">Find Approved Karyakar</label>
+                    <input className="hf-input mb-2" value={karyakarSearch} onChange={(e) => setKaryakarSearch(e.target.value)} disabled={!f.data.center_id} placeholder={f.data.center_id ? 'Search name or Karyakar reference' : 'Select Center first'} />
                     <label className="hf-label">Link Approved Karyakar</label>
                     <select className="hf-input" value={f.data.karyakar_id} onChange={(e) => f.setData('karyakar_id', e.target.value)}>
                         <option value="">Select Karyakar</option>{eligibleKaryakars.map((k) => <option key={k.id} value={k.id}>{k.karyakar_reference} - {k.full_name}</option>)}
                     </select>
-                    <p className="text-xs text-[#76647e] mt-1">Karyakar links enable own field assignments; Sanchalak links are required for Bal Pravruti Group assignment and completion reporting.</p>
+                    <p className="text-xs text-[#76647e] mt-1">Search returns a bounded list; Karyakar links enable own field assignments and Sanchalak links enable Bal Pravruti reporting.</p>
                 </div>}
                 {Object.values(f.errors).length > 0 && <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{Object.values(f.errors)[0]}</div>}
                 <button className="hf-btn" disabled={f.processing}>Create User</button>
@@ -72,7 +92,13 @@ export default function Users({ users, roles, zones, centers, karyakars, canMana
                     </div>
                     {canResetPasswords && <span className="hf-badge">Password reset enabled</span>}
                 </div>
-                <table className="hf-table">
+                <form method="get" action="/admin/users" className="mb-4 flex flex-wrap gap-2">
+                    <input className="hf-input max-w-md" name="search" defaultValue={userSearch} placeholder="Search user name or email" />
+                    <button className="hf-btn" type="submit">Search</button>
+                    {userSearch && <a className="hf-btn hf-btn-secondary" href="/admin/users">Clear</a>}
+                </form>
+                {userListTruncated && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Large user list detected. Showing a safe bounded result set; use search to find any specific user.</div>}
+                <div className="hf-table-scroll"><table className="hf-table hf-mobile-table">
                     <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th><th>Status</th><th>Last password reset</th>{canResetPasswords && <th>Security action</th>}</tr></thead>
                     <tbody>{users.map((u) => {
                         const r = u.roles.find((item) => item.is_primary) ?? u.roles[0];
@@ -90,7 +116,7 @@ export default function Users({ users, roles, zones, centers, karyakars, canMana
                             </td>}
                         </tr>;
                     })}</tbody>
-                </table>
+                </table></div>
             </div>
         </div>
     </AppLayout>;

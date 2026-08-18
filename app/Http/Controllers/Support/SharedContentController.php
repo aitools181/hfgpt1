@@ -28,7 +28,7 @@ class SharedContentController extends Controller
         }
 
         return Inertia::render('support/content', [
-            'contents' => $query->get(),
+            'contents' => $query->limit(500)->get(),
             'centers' => $user->hasPermission('manage_shared_content') ? $this->centers($user, $scope) : [],
             'canManage' => $user->hasPermission('manage_shared_content'),
             'types' => ['quote', 'aagna', 'sankalp', 'vachan', 'ashirwad', 'video', 'pdf', 'audio', 'image', 'link', 'motivation'],
