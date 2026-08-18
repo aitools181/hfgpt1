@@ -1,8 +1,8 @@
-# Final Handoff - SMVS Happy Family Portal v1.0.10
+# Final Handoff - SMVS Happy Family Portal v1.0.11
 
 ## Release purpose
 
-v1.0.10 is the cumulative full portal with the v1.0.9 mobile app-style UI and v1.0.8 runtime-failure/scale hardening retained, plus login/post-login 500 elimination, authentication readiness repair and production auth preflight. Use this release instead of v1.0.9 or earlier.
+v1.0.11 is the cumulative full portal with the v1.0.9 mobile app-style UI and v1.0.8 runtime-failure/scale hardening retained, plus login/post-login 500 elimination, authentication readiness repair and production auth preflight. Use this release instead of v1.0.10 or earlier.
 
 
 ## Mobile UI
@@ -30,7 +30,7 @@ v1.0.10 is the cumulative full portal with the v1.0.9 mobile app-style UI and v1
 3. Require GitHub Actions CI to pass.
 4. Redeploy the existing Coolify Docker Compose resource; do not delete persistent volumes.
 5. Confirm `web`, `worker`, `scheduler`, `db` and `redis` are Running/Healthy.
-6. Confirm `/up` and `/health/ready`.
+6. Confirm `/up`, `/health/live` and `/health/ready`.
 7. Run the focused acceptance matrix before real production work resumes.
 
 ## Recommended minimum host

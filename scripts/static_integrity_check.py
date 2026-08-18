@@ -56,12 +56,13 @@ for match in re.finditer(r"\[([A-Za-z0-9_]+)::class,\s*'([A-Za-z0-9_]+)'\]", rou
 
 # Health routes must bypass Redis-backed session/Inertia middleware so a Redis
 # outage cannot turn a healthy PHP/Laravel process into a false watchdog kill.
+bootstrap_app = read(ROOT / "bootstrap/app.php")
 for health_marker in (
-    "$healthMiddleware = [StartSession::class, ShareErrorsFromSession::class, HandleInertiaRequests::class]",
-    "withoutMiddleware($healthMiddleware)->name('health.live')",
-    "withoutMiddleware($healthMiddleware)->name('health.ready')",
+    "then: function (): void",
+    "Route::get('/health/live', LiveHealthController::class)->name('health.live')",
+    "Route::get('/health/ready', HealthController::class)->name('health.ready')",
 ):
-    if health_marker not in routes:
+    if health_marker not in bootstrap_app:
         issues.append(f"Health dependency-isolation invariant missing: {health_marker}")
 
 # Route/nav permissions must all be seeded.
@@ -170,12 +171,14 @@ try:
     import yaml
     compose_data = yaml.safe_load(compose)
     services = compose_data["services"]
-    if services["web"].get("environment", {}).get("SESSION_DRIVER") != "file":
-        issues.append("Web sessions must use file storage so Redis is not an HTTP availability dependency")
-    if services["web"].get("environment", {}).get("CACHE_STORE") != "file":
-        issues.append("Web cache must use local file storage so Redis is isolated to queue durability")
-    if "app_sessions:/var/www/html/storage/framework/sessions" not in services["web"].get("volumes", []):
-        issues.append("Persistent web session volume missing")
+    if services["web"].get("environment", {}).get("SESSION_DRIVER") != "database":
+        issues.append("Web sessions must use the database backend to avoid container filesystem/session drift")
+    if services["web"].get("environment", {}).get("CACHE_STORE") != "database":
+        issues.append("Web cache/rate limiting must use the database backend to avoid file-cache permission failures")
+    if services["web"].get("environment", {}).get("SESSION_CONNECTION") != "pgsql":
+        issues.append("Database sessions must explicitly use the pgsql connection")
+    if services["web"].get("environment", {}).get("SESSION_ENCRYPT") != "false":
+        issues.append("Server-side database session payload encryption must stay disabled; the session cookie remains protected by Laravel")
     if "redis" in services["web"].get("depends_on", {}):
         issues.append("Web service must not be blocked from starting by Redis queue availability")
 except Exception as exc:  # noqa: BLE001
@@ -359,7 +362,7 @@ if "form .grid.grid-cols-2" not in mobile_css:
 
 # v1.0.10 authentication + post-login failure containment invariants.
 login_controller = read(ROOT / "app/Http/Controllers/Auth/LoginController.php")
-for marker in ("recordSafely", "last_login_at could not be updated", "Secure login session could not be persisted", "tooManyAttempts"):
+for marker in ("recordSafely", "last_login_at could not be updated", "Authentication infrastructure failure", "tooManyAttempts"):
     if marker not in login_controller:
         issues.append(f"Login resilience invariant missing: {marker}")
 
@@ -392,6 +395,28 @@ for marker in ("happy-family:auth-preflight", "audit-log write probe failed", "S
 ci_source = read(ROOT / ".github/workflows/ci.yml")
 if "Production authentication smoke test" not in ci_source or "authenticated dashboard smoke test passed" not in ci_source:
     issues.append("Real Docker login + dashboard CI smoke test missing")
+
+# v1.0.11: POST-only login failures must not depend on container-local cache or
+# file-session persistence. Health routes are also outside the web middleware
+# stack so they remain diagnosable when auth middleware/session state is broken.
+session_migration = ROOT / "database/migrations/2026_08_18_020001_harden_session_and_cache_backends.php"
+if not session_migration.exists():
+    issues.append("Database session/cache hardening migration missing")
+else:
+    migration_source = read(session_migration)
+    for marker in ("Schema::create('sessions'", "Schema::create('cache'", "Schema::create('cache_locks'"):
+        if marker not in migration_source:
+            issues.append(f"Database session/cache hardening invariant missing: {marker}")
+if "middleware('throttle:10,1')" in routes.split("Route::post('/login'", 1)[-1].split(";", 1)[0]:
+    issues.append("Login POST must not use fail-closed framework throttle middleware")
+for marker in ("SessionGuard::attempt() already migrates", "Authentication infrastructure failure"):
+    if marker not in login_controller:
+        issues.append(f"v1.0.11 login infrastructure invariant missing: {marker}")
+for marker in ("SESSION_DRIVER: database", "SESSION_CONNECTION: pgsql", "CACHE_STORE: database"):
+    if marker not in compose:
+        issues.append(f"v1.0.11 Compose auth backend invariant missing: {marker}")
+if "RequestCorrelation::class" not in bootstrap_app or "request_id" not in bootstrap_app:
+    issues.append("Request correlation / exception context hardening missing")
 
 # Production scale indexes must be part of the release.
 scale_migration = ROOT / "database/migrations/2026_08_18_000001_add_production_scale_indexes.php"

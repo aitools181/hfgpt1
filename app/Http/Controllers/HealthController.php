@@ -21,6 +21,7 @@ class HealthController extends Controller
             'auth_schema' => false,
             'storage' => false,
             'session_storage' => false,
+            'session_backend' => false,
             'disk' => false,
         ];
         $diskFreeMb = null;
@@ -54,7 +55,7 @@ class HealthController extends Controller
             }
             $checks['schema'] = $missingTables === [] && $missingColumns === [];
 
-            $authTables = ['users', 'roles', 'permissions', 'role_permissions', 'user_roles', 'audit_logs'];
+            $authTables = ['users', 'roles', 'permissions', 'role_permissions', 'user_roles', 'audit_logs', 'sessions', 'cache', 'cache_locks'];
             foreach ($authTables as $table) {
                 if (! Schema::hasTable($table)) {
                     $authMissingTables[] = $table;
@@ -67,6 +68,9 @@ class HealthController extends Controller
                 'role_permissions' => ['role_id', 'permission_id'],
                 'user_roles' => ['user_id', 'role_id', 'zone_id', 'center_id', 'is_primary'],
                 'audit_logs' => ['id', 'user_id', 'user_name', 'user_role', 'module', 'action', 'record_type', 'record_id', 'old_values', 'new_values', 'ip_address', 'user_agent', 'created_at'],
+                'sessions' => ['id', 'user_id', 'ip_address', 'user_agent', 'payload', 'last_activity'],
+                'cache' => ['key', 'value', 'expiration'],
+                'cache_locks' => ['key', 'owner', 'expiration'],
             ];
             foreach ($authColumnMap as $table => $columns) {
                 if (! Schema::hasTable($table)) {
@@ -88,6 +92,28 @@ class HealthController extends Controller
             $checks['cache'] = Cache::get($key) === 'ok';
             Cache::forget($key);
         } catch (Throwable) {
+        }
+
+        $sessionId = null;
+        try {
+            $sessionId = 'health-'.getmypid().'-'.bin2hex(random_bytes(12));
+            DB::table('sessions')->insert([
+                'id' => $sessionId,
+                'user_id' => null,
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'health-ready',
+                'payload' => base64_encode('happy-family-session-probe'),
+                'last_activity' => time(),
+            ]);
+            $checks['session_backend'] = DB::table('sessions')->where('id', $sessionId)->exists();
+        } catch (Throwable) {
+        } finally {
+            if ($sessionId !== null) {
+                try {
+                    DB::table('sessions')->where('id', $sessionId)->delete();
+                } catch (Throwable) {
+                }
+            }
         }
 
         try {
@@ -117,13 +143,9 @@ class HealthController extends Controller
             ];
             $checks['storage'] = collect($writablePaths)->every(fn (string $path): bool => is_dir($path) && is_writable($path));
 
-            $sessionDir = storage_path('framework/sessions');
-            if (is_dir($sessionDir) && is_writable($sessionDir)) {
-                $probe = $sessionDir.'/.health-session-'.getmypid().'-'.bin2hex(random_bytes(4));
-                $written = @file_put_contents($probe, 'ok', LOCK_EX);
-                $checks['session_storage'] = $written === 2 && @file_get_contents($probe) === 'ok';
-                @unlink($probe);
-            }
+            // Kept for backward-compatible monitoring output. Sessions are now
+            // database-backed, so this mirrors the real session backend probe.
+            $checks['session_storage'] = $checks['session_backend'];
 
             $freeBytes = disk_free_space(storage_path());
             if ($freeBytes !== false) {

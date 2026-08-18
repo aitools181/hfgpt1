@@ -13,16 +13,21 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Throwable;
 
 class LoginController extends Controller
 {
-    public function create(): Response
+    public function create(Request $request): Response
     {
-        return Inertia::render('auth/login');
+        return Inertia::render('auth/login', [
+            'authInfrastructureError' => $request->query('auth_error') === 'infrastructure'
+                ? 'Sign in infrastructure was temporarily unavailable. The incident was logged. Please retry once; if it repeats, check the web container logs and /health/ready.'
+                : null,
+        ]);
     }
 
-    public function store(Request $request, AuditTrail $auditTrail): RedirectResponse
+    public function store(Request $request, AuditTrail $auditTrail): RedirectResponse|SymfonyResponse
     {
         $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
         $credentials = $request->validate([
@@ -61,20 +66,14 @@ class LoginController extends Controller
             throw ValidationException::withMessages(['email' => 'This user account is not active.']);
         }
 
-        // Session rotation is the one post-authentication step that must succeed.
-        // All persistent session directories are verified during container startup;
-        // if this still fails, do not leave a half-authenticated request alive.
+        // SessionGuard::attempt() already migrates the session identifier as part
+        // of a successful login. Rotating it a second time here was redundant and
+        // created an extra persistence failure point. Only attach the password-
+        // reset session version marker after authentication succeeds.
         try {
-            $request->session()->regenerate();
             $request->session()->put('auth_session_version', (int) ($user->session_version ?? 1));
         } catch (Throwable $e) {
-            Auth::guard('web')->logout();
-            Log::critical('Secure login session could not be persisted.', [
-                'user_id' => $user->id,
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
-            ]);
-            throw $e;
+            return $this->authenticationInfrastructureFailure($request, $e, $user->id);
         }
 
         $this->clearRateLimit($key);
@@ -95,6 +94,32 @@ class LoginController extends Controller
         $auditTrail->recordSafely('authentication', 'login', 'user', (string) $user->id);
 
         return redirect()->intended(route('dashboard'));
+    }
+
+    private function authenticationInfrastructureFailure(Request $request, Throwable $e, ?int $userId = null): RedirectResponse|SymfonyResponse
+    {
+        $incident = (string) Str::uuid();
+        try {
+            Auth::guard('web')->logout();
+        } catch (Throwable) {
+            // The original infrastructure exception is the useful diagnostic.
+        }
+
+        Log::critical('Authentication infrastructure failure.', [
+            'incident' => $incident,
+            'user_id' => $userId,
+            'session_driver' => (string) config('session.driver'),
+            'cache_store' => (string) config('cache.default'),
+            'exception' => $e::class,
+            'message' => $e->getMessage(),
+        ]);
+
+        $url = route('login', ['auth_error' => 'infrastructure']);
+        if ($request->header('X-Inertia')) {
+            return Inertia::location($url);
+        }
+
+        return redirect()->to($url);
     }
 
     public function destroy(Request $request, AuditTrail $auditTrail): RedirectResponse

@@ -1,19 +1,20 @@
 # Changelog
 
-## 1.0.10 - Login 500 elimination and authentication readiness hardening - 2026-08-18
+## 1.0.11 - Login/session root fix and independent health diagnostics - 2026-08-18
 
-- Hardened the complete sign-in path so non-essential `last_login_at` or authentication-audit writes can never turn valid credentials into an HTTP 500 response.
-- Added a safe authentication audit writer with structured server logging; strict audit behavior for normal business mutations remains unchanged.
-- Added an idempotent production repair migration for authentication/RBAC/audit schema drift on long-lived Coolify databases.
-- Expanded `/health/ready` with authentication-schema and actual file-session write probes, plus explicit missing auth table/column diagnostics.
-- Changed the session configuration fallback to `file` to match the production Compose contract even when an environment variable is omitted.
-- Removed the hidden `chown ... || true` availability trap: container bootstrap now fails before traffic if Laravel runtime/session directories cannot be owned/written by `www-data`.
-- Added a startup `happy-family:auth-preflight` command that validates auth tables/columns, performs a rollback-only audit write probe, and verifies the configured Super Admin role linkage before Nginx/PHP-FPM begins serving users.
-- Added dashboard fail-soft containment: if a monitoring/field/user-count query fails, the authenticated portal still opens with navigation and a visible warning instead of surfacing a post-login 500.
-- Added a real Docker CI browser-path smoke test for GET login -> CSRF session -> Super Admin POST login -> authenticated Dashboard 200.
-- Added regression tests for login when the audit table or non-critical login-tracking column is temporarily unavailable.
-- Fixed an intermittent shell-test cleanup bug caused by broad `pkill -f` matching under nested CI shells.
-- Re-ran PHP lint, route/permission/Inertia integrity, runtime supervisor simulations, health/bootstrap checks, background self-healing and 100k-row import streaming tests.
+- Removed the framework route-level login throttle that could fail before controller-level fail-open rate-limit handling when the cache backend was unavailable.
+- Moved production authentication sessions from a container filesystem volume to PostgreSQL and added idempotent `sessions` table creation/repair.
+- Moved the default application cache to PostgreSQL and added idempotent `cache` / `cache_locks` table creation/repair.
+- Migration bootstrap temporarily uses array session/cache stores so first deployment can create the database-backed auth infrastructure without a chicken-and-egg dependency.
+- Removed the redundant second session regeneration after successful `Auth::attempt`; only the portal session-version marker is written after authentication.
+- Kept login audit and `last_login_at` writes non-blocking so successful credentials are not converted into a generic 500 by secondary telemetry.
+- Added startup database session and cache round-trip probes and expanded auth preflight/schema checks.
+- Registered `/health/live` and `/health/ready` outside the normal Laravel `web` middleware group and routed them through the dedicated health PHP-FPM pool.
+- Added `X-Request-ID` correlation to every response and Laravel exception log context for deterministic future incident tracing.
+- Added a visible login infrastructure warning path instead of surfacing a raw generic exception where recovery is possible.
+- Added `scripts/diagnose_login_runtime.sh` to capture Compose restart/health state, HTTP diagnostics, auth preflight, session/cache table presence and recent authentication errors before redeploying.
+- GitHub Docker CI now performs a real CSRF + Super Admin login + authenticated Dashboard smoke test and verifies a PostgreSQL session row and cache table.
+- Re-ran PHP/TS syntax, route/permission/Inertia integrity, auth invariants, Nginx syntax, PHP-FPM/Nginx/background recovery simulations, bootstrap/health checks and 100k-row streaming import tests.
 
 ## 1.0.9 - Mobile app-style responsive UI - 2026-08-18
 
@@ -224,3 +225,14 @@
 - Added PostgreSQL, Redis, worker, scheduler, Nginx, Docker Compose and Coolify packaging.
 - Added full project Requirement Traceability Matrix and roadmap.
 - Added Phase 0 feature tests and GitHub Actions CI definition.
+
+## v1.0.11 - Login/session infrastructure hardening
+
+- Moved HTTP sessions from container file storage to PostgreSQL-backed sessions.
+- Moved HTTP cache/rate limiting from local files to PostgreSQL-backed cache tables.
+- Added idempotent `sessions`, `cache`, and `cache_locks` migration and startup round-trip probes.
+- Removed the duplicate fail-closed framework throttle middleware from `POST /login`; LoginController keeps its own fail-open limiter.
+- Removed redundant second session-ID regeneration after `Auth::attempt()`.
+- Added incident-safe authentication infrastructure handling instead of exposing a generic 500 page.
+- Routed public `/health/live` and `/health/ready` through the isolated health FPM pool.
+- Added database session/cache readiness checks and regression/static tests.

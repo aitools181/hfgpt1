@@ -21,6 +21,9 @@ Artisan::command('happy-family:auth-preflight', function (): int {
         'role_permissions' => ['role_id', 'permission_id'],
         'user_roles' => ['user_id', 'role_id', 'zone_id', 'center_id', 'is_primary'],
         'audit_logs' => ['id', 'user_id', 'user_name', 'user_role', 'module', 'action', 'record_type', 'record_id', 'old_values', 'new_values', 'ip_address', 'user_agent', 'created_at'],
+        'sessions' => ['id', 'user_id', 'ip_address', 'user_agent', 'payload', 'last_activity'],
+        'cache' => ['key', 'value', 'expiration'],
+        'cache_locks' => ['key', 'owner', 'expiration'],
     ];
 
     try {
@@ -67,6 +70,40 @@ Artisan::command('happy-family:auth-preflight', function (): int {
         }
     }
 
+    if ($failures === []) {
+        try {
+            $sessionId = 'preflight-'.bin2hex(random_bytes(20));
+            DB::table('sessions')->insert([
+                'id' => $sessionId,
+                'user_id' => null,
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'startup-preflight',
+                'payload' => base64_encode('happy-family-session-probe'),
+                'last_activity' => time(),
+            ]);
+            $sessionOk = DB::table('sessions')->where('id', $sessionId)->exists();
+            DB::table('sessions')->where('id', $sessionId)->delete();
+            if (! $sessionOk) {
+                $failures[] = 'database session round-trip probe failed';
+            }
+        } catch (\Throwable $e) {
+            $failures[] = 'database session write/read/delete probe failed: '.$e->getMessage();
+        }
+    }
+
+    if ($failures === []) {
+        try {
+            $cacheKey = 'preflight:'.bin2hex(random_bytes(16));
+            cache()->put($cacheKey, 'ok', 10);
+            if (cache()->get($cacheKey) !== 'ok') {
+                $failures[] = 'application cache round-trip probe failed';
+            }
+            cache()->forget($cacheKey);
+        } catch (\Throwable $e) {
+            $failures[] = 'application cache write/read/delete probe failed: '.$e->getMessage();
+        }
+    }
+
     $superAdminEmail = strtolower(trim((string) env('SUPER_ADMIN_EMAIL', '')));
     if ($superAdminEmail !== '' && Schema::hasTable('users') && Schema::hasTable('roles') && Schema::hasTable('user_roles')) {
         try {
@@ -90,7 +127,7 @@ Artisan::command('happy-family:auth-preflight', function (): int {
         return 1;
     }
 
-    $this->info('[auth-preflight] Authentication schema, audit write path and Super Admin linkage are ready.');
+    $this->info('[auth-preflight] Authentication schema, database session/cache backends, audit write path and Super Admin linkage are ready.');
     return 0;
 })->purpose('Fail deployment before traffic if authentication/storage prerequisites are broken');
 

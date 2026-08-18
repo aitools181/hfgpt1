@@ -79,6 +79,19 @@ run_case() {
   [ "$ok" -eq 1 ] || { cat "$log_file"; echo "$role supervisor did not restart child" >&2; exit 1; }
 
   kill -TERM "$SUP_PID"
+  stopped=0
+  for _ in $(seq 1 10); do
+    if ! kill -0 "$SUP_PID" 2>/dev/null; then stopped=1; break; fi
+    sleep 1
+  done
+  if [ "$stopped" -ne 1 ]; then
+    cat "$log_file"
+    kill -KILL "$SUP_PID" 2>/dev/null || true
+    wait "$SUP_PID" 2>/dev/null || true
+    SUP_PID=""
+    echo "$role supervisor did not stop within 10 seconds" >&2
+    exit 1
+  fi
   set +e
   wait "$SUP_PID"
   rc=$?
