@@ -3,8 +3,23 @@ set -eu
 cd "$(dirname "$0")/.."
 TMP=$(mktemp -d)
 cleanup() {
-  if [ -n "${SUP_PID:-}" ]; then kill -KILL "$SUP_PID" 2>/dev/null || true; fi
-  pkill -KILL -f "$TMP/php" 2>/dev/null || true
+  # Avoid broad pkill -f patterns: the cleanup command itself can match the
+  # pattern under nested CI shells and terminate the test runner. Stop the
+  # supervisor and any explicitly recorded fake child PIDs only.
+  if [ -n "${SUP_PID:-}" ]; then
+    kill -TERM "$SUP_PID" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$SUP_PID" 2>/dev/null || true
+    wait "$SUP_PID" 2>/dev/null || true
+  fi
+  for pidfile in "$TMP"/run-*/*.pid; do
+    [ -f "$pidfile" ] || continue
+    child=$(cat "$pidfile" 2>/dev/null || true)
+    case "$child" in ''|*[!0-9]*) continue ;; esac
+    kill -TERM "$child" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$child" 2>/dev/null || true
+  done
   rm -rf "$TMP"
 }
 trap cleanup EXIT INT TERM

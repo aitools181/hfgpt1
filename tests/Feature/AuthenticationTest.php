@@ -26,6 +26,31 @@ class AuthenticationTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+
+    public function test_login_is_not_blocked_if_authentication_audit_table_is_temporarily_unavailable(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $user = User::query()->create(['name' => 'Admin', 'email' => 'audit-login@example.test', 'password' => 'StrongPassword123!', 'status' => 'active']);
+        \Illuminate\Support\Facades\Schema::drop('audit_logs');
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'StrongPassword123!'])
+            ->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_login_is_not_blocked_if_last_login_tracking_column_is_temporarily_missing(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $user = User::query()->create(['name' => 'Admin', 'email' => 'tracking-login@example.test', 'password' => 'StrongPassword123!', 'status' => 'active']);
+        \Illuminate\Support\Facades\Schema::table('users', function (\Illuminate\Database\Schema\Blueprint $table): void {
+            $table->dropColumn('last_login_at');
+        });
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'StrongPassword123!'])
+            ->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_inactive_user_is_rejected(): void
     {
         $user = User::query()->create(['name' => 'Inactive', 'email' => 'inactive@example.test', 'password' => 'StrongPassword123!', 'status' => 'inactive']);

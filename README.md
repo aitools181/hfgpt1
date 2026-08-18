@@ -2,7 +2,7 @@
 
 Production-oriented cumulative source package implementing the uploaded **SMVS Happy Family Project SRS Version 3.0** and **Full Portal Wireframe Version 2.0**.
 
-Current release: **1.0.9 - Mobile App-Style Responsive UI + v1.0.8 Failure Hardening (Phases 0-7 cumulative)**
+Current release: **1.0.10 - Login 500 Elimination + Authentication Readiness Hardening + Mobile App UI (Phases 0-7 cumulative)**
 
 ## What is included
 

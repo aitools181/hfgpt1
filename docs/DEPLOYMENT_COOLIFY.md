@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.9
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.10
 
 Deploy this repository as a **Docker Compose** resource. Do not deploy the Dockerfile as a single Coolify Application and do not upload `vendor/` or `node_modules/`.
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.10 - Login 500 elimination and authentication readiness hardening - 2026-08-18
+
+- Hardened the complete sign-in path so non-essential `last_login_at` or authentication-audit writes can never turn valid credentials into an HTTP 500 response.
+- Added a safe authentication audit writer with structured server logging; strict audit behavior for normal business mutations remains unchanged.
+- Added an idempotent production repair migration for authentication/RBAC/audit schema drift on long-lived Coolify databases.
+- Expanded `/health/ready` with authentication-schema and actual file-session write probes, plus explicit missing auth table/column diagnostics.
+- Changed the session configuration fallback to `file` to match the production Compose contract even when an environment variable is omitted.
+- Removed the hidden `chown ... || true` availability trap: container bootstrap now fails before traffic if Laravel runtime/session directories cannot be owned/written by `www-data`.
+- Added a startup `happy-family:auth-preflight` command that validates auth tables/columns, performs a rollback-only audit write probe, and verifies the configured Super Admin role linkage before Nginx/PHP-FPM begins serving users.
+- Added dashboard fail-soft containment: if a monitoring/field/user-count query fails, the authenticated portal still opens with navigation and a visible warning instead of surfacing a post-login 500.
+- Added a real Docker CI browser-path smoke test for GET login -> CSRF session -> Super Admin POST login -> authenticated Dashboard 200.
+- Added regression tests for login when the audit table or non-critical login-tracking column is temporarily unavailable.
+- Fixed an intermittent shell-test cleanup bug caused by broad `pkill -f` matching under nested CI shells.
+- Re-ran PHP lint, route/permission/Inertia integrity, runtime supervisor simulations, health/bootstrap checks, background self-healing and 100k-row import streaming tests.
+
 ## 1.0.9 - Mobile app-style responsive UI - 2026-08-18
 
 - Reworked the authenticated portal shell for phone/tablet use with a sticky mobile app bar, role-aware bottom navigation and a full-screen-safe More menu/bottom sheet.

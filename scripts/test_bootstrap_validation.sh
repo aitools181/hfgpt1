@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT INT TERM
+chmod 755 "$TMP"
 mkdir -p "$TMP/bootstrap/cache" "$TMP/storage"
 cp docker/entrypoint.sh "$TMP/entrypoint.sh"
 chmod +x "$TMP/entrypoint.sh"
