@@ -357,6 +357,42 @@ if ".hf-mobile-table td::before" not in mobile_css:
 if "form .grid.grid-cols-2" not in mobile_css:
     issues.append("Small-screen form stacking invariant missing")
 
+# v1.0.10 authentication + post-login failure containment invariants.
+login_controller = read(ROOT / "app/Http/Controllers/Auth/LoginController.php")
+for marker in ("recordSafely", "last_login_at could not be updated", "Secure login session could not be persisted", "tooManyAttempts"):
+    if marker not in login_controller:
+        issues.append(f"Login resilience invariant missing: {marker}")
+
+audit_service = read(ROOT / "app/Services/AuditTrail.php")
+if "function recordSafely" not in audit_service or "Non-blocking audit write failed" not in audit_service:
+    issues.append("Non-blocking authentication audit fallback missing")
+
+dashboard_controller = read(ROOT / "app/Http/Controllers/DashboardController.php")
+for marker in ("fallbackMonitoring", "Dashboard monitoring query failed", "dashboardWarnings"):
+    if marker not in dashboard_controller:
+        issues.append(f"Dashboard post-login failure containment invariant missing: {marker}")
+
+auth_repair = ROOT / "database/migrations/2026_08_18_010001_repair_authentication_foundation.php"
+if not auth_repair.exists():
+    issues.append("Authentication foundation repair migration missing")
+
+for marker in ("auth_schema", "session_storage", "auth_missing_tables", "auth_missing_columns"):
+    if marker not in health_controller:
+        issues.append(f"Authentication readiness invariant missing: {marker}")
+
+for marker in ("www-data cannot write required Laravel runtime directories", "hf-write-test", "happy-family:auth-preflight"):
+    if marker not in entrypoint:
+        issues.append(f"Session/auth bootstrap guard missing: {marker}")
+
+console_source = read(ROOT / "routes/console.php")
+for marker in ("happy-family:auth-preflight", "audit-log write probe failed", "Super Admin role linkage check failed"):
+    if marker not in console_source:
+        issues.append(f"Authentication startup preflight invariant missing: {marker}")
+
+ci_source = read(ROOT / ".github/workflows/ci.yml")
+if "Production authentication smoke test" not in ci_source or "authenticated dashboard smoke test passed" not in ci_source:
+    issues.append("Real Docker login + dashboard CI smoke test missing")
+
 # Production scale indexes must be part of the release.
 scale_migration = ROOT / "database/migrations/2026_08_18_000001_add_production_scale_indexes.php"
 if not scale_migration.exists():

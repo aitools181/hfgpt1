@@ -6,6 +6,8 @@ use App\Models\AuditLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class AuditTrail
 {
@@ -68,6 +70,24 @@ class AuditTrail
             'user_agent' => substr((string) request()?->userAgent(), 0, 500),
             'created_at' => now(),
         ]);
+    }
+
+    public function recordSafely(string $module, string $action, ?string $recordType = null, ?string $recordId = null, array $oldValues = [], array $newValues = [], ?string $reason = null, ?int $zoneId = null, ?int $centerId = null): bool
+    {
+        try {
+            $this->record($module, $action, $recordType, $recordId, $oldValues, $newValues, $reason, $zoneId, $centerId);
+            return true;
+        } catch (Throwable $e) {
+            Log::error('Non-blocking audit write failed.', [
+                'module' => $module,
+                'action' => $action,
+                'record_type' => $recordType,
+                'record_id' => $recordId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     private function sanitize(array $values): array

@@ -129,6 +129,30 @@ jobs:
             exit 1
           fi
 
+          # Production authentication smoke test. This exercises the real file
+          # session driver, CSRF middleware, seeded Super Admin, login side
+          # effects and the first authenticated dashboard request. A previous
+          # regression could pass /health/ready but fail only after credentials
+          # were submitted, so CI must cover the complete browser login path.
+          rm -f /tmp/hf-cookies.txt /tmp/hf-login-headers.txt /tmp/hf-dashboard.html
+          curl -fsS -c /tmp/hf-cookies.txt http://127.0.0.1/login >/tmp/hf-login.html
+          xsrf_encoded=$(awk '$6 == "XSRF-TOKEN" {print $7}' /tmp/hf-cookies.txt | tail -n 1)
+          test -n "$xsrf_encoded"
+          xsrf=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.unquote(sys.argv[1]))' "$xsrf_encoded")
+          login_status=$(curl -sS -o /dev/null -D /tmp/hf-login-headers.txt -w '%{http_code}' \
+            -b /tmp/hf-cookies.txt -c /tmp/hf-cookies.txt \
+            -H "X-XSRF-TOKEN: $xsrf" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'email=admin@example.invalid' \
+            --data-urlencode 'password=test_password_ChangeMe123!' \
+            http://127.0.0.1/login)
+          test "$login_status" = "302" || test "$login_status" = "303"
+          grep -Eiq '^location: .*/?$' /tmp/hf-login-headers.txt
+          dashboard_status=$(curl -sS -o /tmp/hf-dashboard.html -w '%{http_code}' -b /tmp/hf-cookies.txt http://127.0.0.1/)
+          test "$dashboard_status" = "200"
+          grep -q 'Happy Family' /tmp/hf-dashboard.html
+          echo 'Production login + authenticated dashboard smoke test passed.'
+
           # Start background services too and verify their init:true-aware health checks.
           docker compose up -d worker scheduler
           background_healthy=0

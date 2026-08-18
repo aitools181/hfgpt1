@@ -40,7 +40,24 @@ validate_app_url
 
 
 mkdir -p storage/app/private storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
-chown -R www-data:www-data storage bootstrap/cache || true
+
+# Authentication depends on writable session/cache directories. Do not hide
+# ownership failures and then discover them as a 500 only after credentials are
+# submitted. Make permissions deterministic and fail deployment before traffic.
+if ! chown -R www-data:www-data storage bootstrap/cache; then
+    echo "[bootstrap] ERROR: unable to set storage/bootstrap ownership for www-data." >&2
+    exit 1
+fi
+chmod -R u+rwX,g+rwX storage bootstrap/cache
+
+if command -v su >/dev/null 2>&1; then
+    if ! su -s /bin/sh -c '        set -eu;         for dir in storage/framework/sessions storage/framework/cache storage/framework/views storage/logs bootstrap/cache; do             probe="$dir/.hf-write-test-$$";             printf ok > "$probe";             test "$(cat "$probe")" = ok;             rm -f "$probe";         done    ' www-data; then
+        echo "[bootstrap] ERROR: www-data cannot write required Laravel runtime directories." >&2
+        exit 1
+    fi
+else
+    echo "[bootstrap] WARNING: su is unavailable; ownership/mode checks were applied but user-level write probe was skipped." >&2
+fi
 
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     echo "[bootstrap] Running database migrations..."
@@ -59,6 +76,9 @@ if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
         echo "[bootstrap] Running production-safe seeders..."
         php artisan db:seed --force --no-interaction
     fi
+
+    echo "[bootstrap] Verifying authentication foundation before serving traffic..."
+    php artisan happy-family:auth-preflight --no-interaction
 
     php artisan storage:link >/dev/null 2>&1 || true
 

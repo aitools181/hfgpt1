@@ -1,8 +1,8 @@
-# Final Handoff - SMVS Happy Family Portal v1.0.9
+# Final Handoff - SMVS Happy Family Portal v1.0.10
 
 ## Release purpose
 
-v1.0.9 is the cumulative full portal with the v1.0.8 runtime-failure/scale hardening retained and a complete mobile app-style responsive UI pass layered on top. Use this release instead of v1.0.8 or earlier.
+v1.0.10 is the cumulative full portal with the v1.0.9 mobile app-style UI and v1.0.8 runtime-failure/scale hardening retained, plus login/post-login 500 elimination, authentication readiness repair and production auth preflight. Use this release instead of v1.0.9 or earlier.
 
 
 ## Mobile UI
