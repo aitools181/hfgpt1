@@ -122,7 +122,10 @@ PY
 echo "[10/13] Shell syntax"
 find docker scripts -type f -name '*.sh' -print0 | xargs -0 -n1 sh -n
 
-echo "[11/13] Runtime dependencies"
+echo "[11/14] Redis queue timeout invariant"
+scripts/test_redis_queue_config.sh
+
+echo "[12/14] Runtime dependencies"
 if [ ! -f vendor/autoload.php ]; then
   echo "vendor/ is missing. Run: composer install" >&2
   exit 2
@@ -132,7 +135,7 @@ if [ ! -d node_modules ]; then
   exit 2
 fi
 
-echo "[12/13] Automated tests and frontend checks"
+echo "[13/14] Automated tests and frontend checks"
 php artisan config:clear
 php artisan test
 npm run types:check
@@ -140,5 +143,6 @@ npm run build
 php artisan route:cache
 php artisan config:cache
 
-echo "[13/13] Release check complete"
+echo "[14/14] Release check complete"
 echo "PASS"
+

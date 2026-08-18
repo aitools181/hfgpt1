@@ -41,5 +41,16 @@ return [
             'timeout' => (float) env('REDIS_CONNECT_TIMEOUT', 2.0),
             'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 2.0),
         ],
+        'queue' => [
+            'host' => env('REDIS_HOST', 'redis'),
+            'password' => env('REDIS_PASSWORD'),
+            'port' => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+            'timeout' => (float) env('REDIS_CONNECT_TIMEOUT', 2.0),
+            // Queue workers use BLPOP for REDIS_QUEUE_BLOCK_FOR seconds. This
+            // socket read timeout must stay comfortably above block_for or
+            // PhpRedis will raise false "read error on connection" exceptions.
+            'read_timeout' => (float) env('REDIS_QUEUE_READ_TIMEOUT', 15.0),
+        ],
     ],
 ];
