@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Assignments;
 
 use App\Http\Controllers\Controller;
+use App\Models\GroupKaryakar;
 use App\Models\Karyakar;
 use App\Models\SamparkArea;
 use App\Models\SankalpGroup;
@@ -10,6 +11,7 @@ use App\Models\Society;
 use App\Models\Target;
 use App\Services\Assignments\TargetService;
 use App\Services\OrganizationalScope;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,13 +30,64 @@ class TargetController extends Controller
         return Inertia::render('assignments/targets', [
             'targets' => $query->latest()->paginate(25)->withQueryString(),
             'centers' => $scope->centers($request->user())->orderBy('name')->get(['id', 'name', 'code']),
-            'groups' => SankalpGroup::query()->whereIn('center_id', $centerIds)->where('status', 'active')->whereNotNull('sampark_area_id')->orderBy('group_code')->get(['id', 'center_id', 'group_code', 'status']),
-            'karyakars' => Karyakar::query()->whereIn('center_id', $centerIds)->where('status', 'approved')->orderBy('full_name')->get(['id', 'center_id', 'full_name', 'karyakar_reference']),
-            'groupKaryakars' => \App\Models\GroupKaryakar::query()->where('status', 'active')->whereHas('group', fn ($q) => $q->whereIn('center_id', $centerIds))->get(['group_id', 'karyakar_id']),
-            'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'center_id', 'name']),
-            'societies' => Society::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'center_id', 'sampark_area_id', 'name']),
             'filters' => $request->only(['center_id', 'status']),
         ]);
+    }
+
+    public function searchOptions(Request $request, OrganizationalScope $scope): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => ['required', Rule::in(['group', 'karyakar', 'area', 'society'])],
+            'center_id' => ['required', 'integer'],
+            'group_id' => ['nullable', 'integer'],
+            'area_id' => ['nullable', 'integer'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $centerId = (int) $data['center_id'];
+        abort_unless($scope->centers($request->user())->whereKey($centerId)->exists(), 403, 'Center is outside your permitted scope.');
+        $search = trim((string) ($data['q'] ?? ''));
+
+        if ($data['type'] === 'group') {
+            $query = SankalpGroup::query()
+                ->where('center_id', $centerId)
+                ->where('status', 'active')
+                ->whereNotNull('sampark_area_id');
+            if ($search !== '') {
+                $query->where('group_code', 'ilike', '%'.$search.'%');
+            }
+
+            return response()->json($query->orderBy('group_code')->limit(75)->get([
+                'id', 'center_id', 'group_code', 'sampark_area_id', 'society_id', 'status',
+            ]));
+        }
+
+        if ($data['type'] === 'karyakar') {
+            abort_unless(! empty($data['group_id']), 422, 'Group is required for Karyakar options.');
+            $groupId = (int) $data['group_id'];
+            abort_unless(SankalpGroup::query()->whereKey($groupId)->where('center_id', $centerId)->exists(), 422, 'Selected Group is invalid for the Center.');
+
+            $query = Karyakar::query()
+                ->where('center_id', $centerId)
+                ->where('status', 'approved')
+                ->whereIn('id', GroupKaryakar::query()->where('group_id', $groupId)->where('status', 'active')->select('karyakar_id'));
+            if ($search !== '') {
+                $query->where(fn ($q) => $q->where('full_name', 'ilike', '%'.$search.'%')->orWhere('karyakar_reference', 'ilike', '%'.$search.'%'));
+            }
+
+            return response()->json($query->orderBy('full_name')->limit(50)->get(['id', 'center_id', 'full_name', 'karyakar_reference']));
+        }
+
+        if ($data['type'] === 'area') {
+            $query = SamparkArea::query()->where('center_id', $centerId)->where('status', 'active');
+            if ($search !== '') $query->where('name', 'ilike', '%'.$search.'%');
+            return response()->json($query->orderBy('name')->limit(100)->get(['id', 'center_id', 'name']));
+        }
+
+        $query = Society::query()->where('center_id', $centerId)->where('status', 'active');
+        if (! empty($data['area_id'])) $query->where('sampark_area_id', (int) $data['area_id']);
+        if ($search !== '') $query->where('name', 'ilike', '%'.$search.'%');
+        return response()->json($query->orderBy('name')->limit(100)->get(['id', 'center_id', 'sampark_area_id', 'name']));
     }
 
     public function store(Request $request, OrganizationalScope $scope, TargetService $service): RedirectResponse

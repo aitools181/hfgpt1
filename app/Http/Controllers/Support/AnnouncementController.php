@@ -24,7 +24,7 @@ class AnnouncementController extends Controller
         }
 
         return Inertia::render('support/announcements', [
-            'announcements' => $query->get(),
+            'announcements' => $query->limit(500)->get(),
             'centers' => $user->hasPermission('manage_announcements') ? $this->centers($user, $scope) : [],
             'canManage' => $user->hasPermission('manage_announcements'),
         ]);

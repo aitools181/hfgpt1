@@ -1,5 +1,7 @@
 # v1.0.6 Self-Healing Web Watchdog
 
+> **Superseded by v1.0.7:** the v1.0.6 three-failure hard-exit watchdog was too aggressive under transient PHP-FPM starvation. See `V1_0_7_RUNTIME_FAILURE_AUDIT.md`.
+
 ## Goal
 
 Recover automatically when Nginx and PHP-FPM processes still exist but the HTTP/Laravel request path has become unresponsive.

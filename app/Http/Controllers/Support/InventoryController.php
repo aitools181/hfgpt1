@@ -29,7 +29,7 @@ class InventoryController extends Controller
             $query->where('center_id', $centerId);
         }
         return Inertia::render('support/inventory', [
-            'items' => $query->get(),
+            'items' => $query->limit(1000)->get(),
             'centers' => $this->centers($user, $scope),
             'canManage' => $user->hasPermission('manage_inventory'),
             'filters' => ['center_id' => $request->input('center_id')],

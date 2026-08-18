@@ -1,78 +1,98 @@
-# Production Operations Runbook
+# Production Operations Runbook - v1.0.9
 
-## Purpose
+## Daily / routine checks
 
-This runbook is the operational handoff for the SMVS Happy Family Portal. It assumes deployment from the repository/Docker Compose configuration through Coolify.
+- Open `/health/ready`; normal status is HTTP 200 / `ready`.
+- Confirm `web`, `worker`, `scheduler`, `db`, and `redis` are Running/Healthy in Coolify.
+- Review repeated supervisor recovery messages, queue failures, database errors and disk warnings.
+- Verify scheduled Reminder/Alert activity continues.
+- Keep an external verified backup schedule; same-host volumes are not a disaster-recovery backup.
 
-## Daily checks
+## What an automatic restart means
 
-- Confirm the public application responds and `/health/ready` returns HTTP 200 with `database=true` and `cache=true`.
-- Confirm the `worker` and `scheduler` services are running.
-- Review application/container logs for repeated exceptions, database errors or queue failures.
-- Review the portal Reminders / Alerts screen for expected 4-day and 7-day events.
-- Review open Support Requests and low-stock Inventory items as part of normal operations.
+v1.0.8+ runtime normally recovers a single Nginx/PHP-FPM/worker/scheduler child failure without replacing its Compose container. A Docker-level web restart occurs only after the bounded in-container recovery budget is exhausted or the container is killed externally/OOMed.
+
+Messages to look for:
+
+```text
+recovering PHP-FPM reason='PHP-FPM master exited unexpectedly'
+recovering PHP-FPM reason='PHP-FPM master PID was alive but control pool was unresponsive'
+recovering Nginx reason='Nginx master exited unexpectedly'
+recovering Nginx reason='Nginx PID was alive but health endpoint was unresponsive'
+shutdown code=1 reason=...
+```
+
+Worker/scheduler logs show child exit code/runtime/backoff and the replacement child PID.
+
+## Incident: site unavailable but web says Running
+
+1. Check `/up` and `/health/ready` separately.
+2. If `/up` fails, inspect web supervisor/Nginx/FPM logs. Dedicated probes should recover live-but-stuck processes automatically.
+3. If `/up` works but `/health/ready` is degraded, do not repeatedly restart web. Investigate the failed readiness field: DB, Redis, schema, storage or disk.
+4. Run `scripts/runtime_diagnose_host.sh <web-container>` before a manual redeploy when possible.
+
+## Incident: container Exited/restarted
+
+Inspect Docker evidence:
+
+```bash
+docker inspect <container> --format 'ExitCode={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} Restart={{.HostConfig.RestartPolicy.Name}} RestartCount={{.RestartCount}} Finished={{.State.FinishedAt}} Error={{.State.Error}}'
+```
+
+Then inspect kernel OOM evidence:
+
+```bash
+journalctl -k --since "2 hours ago" | grep -Ei 'out of memory|oom|killed process'
+```
+
+Interpretation:
+
+- `OOMKilled=true` / exit 137: memory pressure/SIGKILL; inspect host RAM and cgroup memory events.
+- exit 143: SIGTERM; inspect Coolify/Docker deployment/stop events.
+- supervisor repeated-recovery message: process/app liveness could not recover inside the configured budget.
+- `RestartCount` increasing with service returning healthy: auto-restart is working as designed.
+
+## Memory / load prevention
+
+Do not remove the supplied container memory/PID ceilings casually. If normal measured usage approaches a limit, increase host capacity first and adjust the relevant service deliberately. The default service ceilings total roughly 2.9 GB, while production preflight requires at least 4.5 GB host RAM.
+
+Large report preview is bounded and CSV export is isolated/streamed. Large import work belongs on the queue worker. Do not convert these paths back to unbounded `get()`/in-memory processing.
+
+## Redis / queue
+
+Redis is not the web session/cache dependency. If Redis is down, normal page traffic should remain available, while new async imports may be temporarily unavailable and the worker will back off/recover. `/health/ready` verifies Redis is writable, not merely reachable.
+
+If Redis remains unhealthy, inspect its memory/disk/AOF logs. Do not switch from `noeviction` to an eviction policy for production queue data merely to hide a capacity problem; increase capacity and clear only data that is safe to lose.
+
+## PostgreSQL
+
+PostgreSQL has connection/query timeouts and resource-conscious defaults. A DB outage should show readiness degraded while the DB service uses Docker restart recovery. Avoid restarting the web repeatedly for a DB-only incident.
+
+Before destructive DB remediation, capture logs and a backup when possible.
+
+## Disk
+
+`/health/ready` becomes degraded when application storage free space falls below the configured threshold. Docker container logs and supervisor logs are rotated, but database/uploads/backups represent legitimate data growth and must be monitored at host level.
 
 ## Release procedure
 
-1. Run CI on the exact Git commit to be released.
-2. Confirm PHP tests, TypeScript type check and Vite production build pass.
-3. Take a pre-release backup.
-4. Deploy the immutable Git commit in Coolify.
-5. The application container runs migrations and the baseline seeder on startup. Baseline seeding is idempotent.
-6. Verify `/health/ready`.
-7. Sign in as Super Admin and smoke-test Dashboard, Family list, Karyakar list, Groups, My Target (with a field test account), Reports, Bal Pravruti and Support modules.
-8. Keep the previous working Git commit available for application rollback. Database rollback should be performed only when the migration/data implications are understood; otherwise restore the pre-release backup.
+1. `scripts/production_preflight.sh` on the host.
+2. CI green on exact commit.
+3. verified backup.
+4. deploy/redeploy exact commit.
+5. verify all service health.
+6. verify `/up` + `/health/ready`.
+7. Super Admin smoke test: Dashboard, Users/password reset, Families/Karyakars, Groups, My Target, Reminders, Bal Dashboard/Analysis, Reports.
+8. keep prior known-good Git commit available for application rollback.
 
-## Backups
+## Backup / restore
 
-The repository contains `scripts/backup.sh` and `scripts/restore.sh` for a Docker Compose host. A backup contains:
+Use `scripts/backup.sh` and `scripts/restore.sh`; store verified backup copies outside the application host. Practice restore in staging. See `BACKUP_RESTORE.md`.
 
-- PostgreSQL logical dump
-- persistent `storage/app/public` content
-- release `VERSION`
-- SHA-256 checksums
+## Private GitHub repository
 
-Store backups outside the application host and apply the retention policy approved by SMVS. A backup is not considered verified until a restore drill has succeeded in a non-production environment.
-
-## Restore drill
-
-1. Create a fresh isolated deployment using the same release.
-2. Copy one backup directory to the deployment host.
-3. Run `CONFIRM_RESTORE=YES scripts/restore.sh <backup-directory>`.
-4. Verify checksums, `/health/ready`, login, representative records, uploaded content, reports and audit history.
-5. Record the drill date, backup timestamp, restore duration and result.
-
-## Queue and scheduler
-
-- `worker` runs Laravel `queue:work` and is intended for asynchronous workloads.
-- `scheduler` runs `schedule:work`.
-- The inactivity command `happy-family:inactivity-check` runs hourly with overlap protection.
-- If reminders stop appearing, first check the scheduler service logs and then run the command manually in the web container.
+Changing the GitHub repository from public to private does not terminate already-running containers. It can make a future build/redeploy fail if Coolify no longer has repository credentials. Keep the GitHub App/deploy key authorized before changing visibility.
 
 ## Security operations
 
-- Never commit `.env`, production exports, database dumps or member/family data to Git.
-- Use a long random `APP_KEY`, database password and Super Admin password.
-- Keep `APP_DEBUG=false` in production.
-- Keep HTTPS enabled at Coolify/proxy level.
-- Rotate credentials immediately when an administrator leaves or a secret is exposed.
-- Review Activity/Audit Logs for administrative changes and transfers.
-- Password resets use the dedicated `reset_user_passwords` permission. Keep it on Super Admin by default; delegate it only when operationally necessary. Delegated reset authority remains limited to equal/lower roles inside the assignee's scope.
-- After an administrative password reset, the target user's existing sessions are revoked. If Super Admin resets their own password, they are signed out immediately and must log in with the new password.
-- Supportive content uploads are limited by type and size; do not use the portal as a general file store.
-
-## Incident priorities
-
-1. Protect data integrity and stop unauthorized access.
-2. Preserve logs and a current backup before destructive remediation when possible.
-3. Restore service from a known-good application commit and verified backup.
-4. Document what changed, who acted and what data was affected.
-
-
-## Automatic web self-healing
-
-The web container is configured with `restart: unless-stopped`. Its supervisor exits the container when either Nginx/PHP-FPM dies or the internal `/up` liveness check fails for the configured consecutive-failure threshold. Docker then restarts the container automatically.
-
-When an automatic restart occurs, inspect the preceding container logs and host metrics. Common causes include OOM kills, PHP-FPM/Nginx crashes, disk exhaustion, host/Docker restarts, or application-level hangs. Repeated restarts are a symptom to diagnose, not a substitute for fixing the underlying cause.
-
-Use `/health/ready` to distinguish dependency problems: if `/up` is healthy but `/health/ready` is degraded, investigate PostgreSQL/Redis/schema rather than restarting the web service.
+Keep `APP_DEBUG=false`, HTTPS + secure session cookie enabled, database/Redis unexposed, unique secrets, and password-reset authority narrowly delegated. Review Audit Logs after administrative changes.

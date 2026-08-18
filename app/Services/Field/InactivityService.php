@@ -2,6 +2,7 @@
 
 namespace App\Services\Field;
 
+use App\Models\GroupFamilyAssignment;
 use App\Models\HomeVisit;
 use App\Models\InactivityEvent;
 use App\Models\Karyakar;
@@ -10,6 +11,7 @@ use App\Models\Target;
 use App\Services\AuditTrail;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -22,17 +24,71 @@ class InactivityService
         $asOf = $asOf ?: now();
         $created = ['reminders' => 0, 'alerts' => 0];
 
+        // Production-scale scan: bulk-load pending-work flags, current targets,
+        // last activity and open-event presence for each Group chunk. The old
+        // per-Karyakar query pattern could issue tens of thousands of queries at
+        // the 10k-Group scale and create avoidable PostgreSQL pressure.
         SankalpGroup::query()
             ->where('status', 'active')
             ->with(['karyakarAssignments' => fn ($q) => $q->where('status', 'active')->with('karyakar')])
-            ->chunkById(100, function (Collection $groups) use ($asOf, &$created): void {
+            ->chunkById(200, function (Collection $groups) use ($asOf, &$created): void {
+                $groupIds = $groups->pluck('id')->map(fn ($id) => (int) $id)->all();
+                if ($groupIds === []) {
+                    return;
+                }
+
+                $pendingGroups = GroupFamilyAssignment::query()
+                    ->whereIn('group_id', $groupIds)
+                    ->where('status', 'active')
+                    ->whereDoesntHave('homeVisit')
+                    ->distinct()
+                    ->pluck('group_id')
+                    ->mapWithKeys(fn ($id) => [(int) $id => true]);
+
+                $targetsByGroup = Target::query()
+                    ->whereIn('group_id', $groupIds)
+                    ->where('status', 'active')
+                    ->whereDate('start_date', '<=', $asOf->toDateString())
+                    ->whereDate('end_date', '>=', $asOf->toDateString())
+                    ->orderByDesc('start_date')
+                    ->get()
+                    ->groupBy('group_id');
+
+                $lastVisits = HomeVisit::query()
+                    ->selectRaw('group_id, karyakar_id, MAX(completed_at) AS last_completed_at')
+                    ->whereIn('group_id', $groupIds)
+                    ->groupBy('group_id', 'karyakar_id')
+                    ->get()
+                    ->mapWithKeys(fn ($row) => [$row->group_id.':'.$row->karyakar_id => $row->last_completed_at]);
+
+                $groupsWithOpenEvents = InactivityEvent::query()
+                    ->whereIn('group_id', $groupIds)
+                    ->whereIn('status', ['open', 'escalated'])
+                    ->distinct()
+                    ->pluck('group_id')
+                    ->mapWithKeys(fn ($id) => [(int) $id => true]);
+
                 foreach ($groups as $group) {
+                    if (! $pendingGroups->has((int) $group->id)) {
+                        // Avoid a no-op query for the large majority of completed
+                        // Groups that have no open inactivity record to resolve.
+                        if ($groupsWithOpenEvents->has((int) $group->id)) {
+                            $this->resolveNoPendingWork($group, $asOf);
+                        }
+                        continue;
+                    }
+
+                    $groupTargets = $targetsByGroup->get($group->id, collect());
                     foreach ($group->karyakarAssignments as $assignment) {
                         $karyakar = $assignment->karyakar;
                         if (! $karyakar || $karyakar->status !== 'approved') {
                             continue;
                         }
-                        $result = $this->checkGroupKaryakar($group, $karyakar, $asOf);
+
+                        $target = $this->selectPreloadedTarget($groupTargets, $karyakar);
+                        $lastVisit = $lastVisits->get($group->id.':'.$karyakar->id);
+                        $anchor = $this->activityAnchorFromValue($group, $target, $lastVisit, $asOf);
+                        $result = $this->checkThresholds($group, $karyakar, $target, $anchor, $asOf);
                         $created['reminders'] += $result['reminder'] ? 1 : 0;
                         $created['alerts'] += $result['alert'] ? 1 : 0;
                     }
@@ -57,6 +113,50 @@ class InactivityService
 
         $target = $this->relevantTarget($group, $karyakar, $asOf);
         $anchor = $this->activityAnchor($group, $karyakar, $target, $asOf);
+
+        return $this->checkThresholds($group, $karyakar, $target, $anchor, $asOf);
+    }
+
+    /** @param Collection<int, Target> $targets */
+    private function selectPreloadedTarget(Collection $targets, Karyakar $karyakar): ?Target
+    {
+        $specific = $targets
+            ->filter(fn (Target $target): bool => (int) $target->karyakar_id === (int) $karyakar->id)
+            ->sortByDesc(fn (Target $target): string => $target->start_date->toDateString())
+            ->first();
+
+        if ($specific) {
+            return $specific;
+        }
+
+        return $targets
+            ->filter(fn (Target $target): bool => $target->karyakar_id === null)
+            ->sortByDesc(fn (Target $target): string => $target->start_date->toDateString())
+            ->first();
+    }
+
+    private function activityAnchorFromValue(SankalpGroup $group, ?Target $target, mixed $lastVisit, CarbonInterface $asOf): ?CarbonInterface
+    {
+        if ($lastVisit) {
+            return Carbon::parse($lastVisit);
+        }
+
+        $activation = $group->activated_at?->copy();
+        if ($target) {
+            $start = $target->start_date->copy()->startOfDay();
+            if ($start->lte($asOf)) {
+                if ($activation && $activation->gt($start)) {
+                    return $activation;
+                }
+                return $start;
+            }
+        }
+
+        return $activation;
+    }
+
+    private function checkThresholds(SankalpGroup $group, Karyakar $karyakar, ?Target $target, ?CarbonInterface $anchor, CarbonInterface $asOf): array
+    {
         if (! $anchor || $anchor->gt($asOf)) {
             return ['reminder' => false, 'alert' => false];
         }
@@ -124,7 +224,7 @@ class InactivityService
             }
 
             return $resolved;
-        });
+        }, 3);
     }
 
     private function resolveNoPendingWork(SankalpGroup $group, CarbonInterface $resolvedAt): int
@@ -208,23 +308,33 @@ class InactivityService
             return false;
         }
 
-        $event = InactivityEvent::query()->create([
-            'center_id' => $group->center_id,
-            'group_id' => $group->id,
-            'karyakar_id' => $karyakar->id,
-            'target_id' => $target?->id,
-            'recipient_user_id' => $karyakar->user_id,
-            'event_type' => $type,
-            'inactivity_days' => $days,
-            'status' => 'open',
-            'activity_anchor_at' => $anchor,
-            'triggered_at' => $asOf,
-            'metadata' => [
-                'group_code' => $group->group_code,
-                'target_name' => $target?->name,
-                'threshold_days' => $type === 'alert' ? 7 : 4,
-            ],
-        ]);
+        try {
+            $event = InactivityEvent::query()->create([
+                'center_id' => $group->center_id,
+                'group_id' => $group->id,
+                'karyakar_id' => $karyakar->id,
+                'target_id' => $target?->id,
+                'recipient_user_id' => $karyakar->user_id,
+                'event_type' => $type,
+                'inactivity_days' => $days,
+                'status' => 'open',
+                'activity_anchor_at' => $anchor,
+                'triggered_at' => $asOf,
+                'metadata' => [
+                    'group_code' => $group->group_code,
+                    'target_name' => $target?->name,
+                    'threshold_days' => $type === 'alert' ? 7 : 4,
+                ],
+            ]);
+        } catch (QueryException $exception) {
+            // A second scheduler/process can race between the existence check
+            // and INSERT. The partial unique index is authoritative; a duplicate
+            // event is a harmless no-op rather than a reason to abort the scan.
+            if ((string) $exception->getCode() === '23505') {
+                return false;
+            }
+            throw $exception;
+        }
 
         $this->audit->record(
             'inactivity',

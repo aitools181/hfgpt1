@@ -22,7 +22,7 @@ class FamilyTimeController extends Controller
         if (! $user->hasPermission('manage_family_time')) {
             $scheduleQuery->where('status', 'active');
         }
-        $schedules = $scheduleQuery->get();
+        $schedules = $scheduleQuery->limit(500)->get();
 
         $completionQuery = FamilyTimeCompletion::query()->with(['schedule:id,title,starts_at', 'user:id,name', 'center:id,name,code'])->orderByDesc('completed_on')->orderByDesc('id');
         if (! $user->hasPermission('manage_family_time')) {

@@ -10,11 +10,34 @@ require_env() {
     fi
 }
 
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-    require_env APP_KEY
-    require_env APP_URL
-    require_env DB_PASSWORD
-fi
+validate_app_key() {
+    # Laravel's default AES-256-CBC cipher requires a 32-byte key. Accept the
+    # normal base64: form or a raw 32-byte key and fail deployment early rather
+    # than serving intermittent 500 errors from cookie/session encryption.
+    php -r '
+        $key=(string)getenv("APP_KEY");
+        if (str_starts_with($key,"base64:")) {
+            $decoded=base64_decode(substr($key,7), true);
+            if ($decoded === false || strlen($decoded) !== 32) { fwrite(STDERR,"[bootstrap] ERROR: APP_KEY must decode to exactly 32 bytes.\n"); exit(1); }
+            exit(0);
+        }
+        if (strlen($key) !== 32) { fwrite(STDERR,"[bootstrap] ERROR: raw APP_KEY must be exactly 32 bytes.\n"); exit(1); }
+    '
+}
+
+validate_app_url() {
+    case "${APP_URL:-}" in
+        http://*|https://*) ;;
+        *) echo "[bootstrap] ERROR: APP_URL must start with http:// or https://." >&2; exit 1 ;;
+    esac
+}
+
+require_env APP_KEY
+require_env APP_URL
+require_env DB_PASSWORD
+validate_app_key
+validate_app_url
+
 
 mkdir -p storage/app/private storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
 chown -R www-data:www-data storage bootstrap/cache || true
@@ -22,7 +45,7 @@ chown -R www-data:www-data storage bootstrap/cache || true
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     echo "[bootstrap] Running database migrations..."
     attempts=0
-    until php artisan migrate --force --no-interaction; do
+    until PGOPTIONS="-c statement_timeout=0 -c lock_timeout=30000" php artisan migrate --force --no-interaction --isolated; do
         attempts=$((attempts + 1))
         if [ "$attempts" -ge 30 ]; then
             echo "[bootstrap] ERROR: database migrations could not complete after 30 attempts."

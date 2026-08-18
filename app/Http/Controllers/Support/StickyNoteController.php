@@ -14,7 +14,7 @@ class StickyNoteController extends Controller
     public function index(Request $request): Response
     {
         return Inertia::render('support/sticky-notes', [
-            'notes' => StickyNote::query()->where('user_id', $request->user()->id)->orderByRaw("CASE WHEN status = 'open' THEN 0 ELSE 1 END")->orderByDesc('pinned_at')->orderByDesc('updated_at')->get(),
+            'notes' => StickyNote::query()->where('user_id', $request->user()->id)->orderByRaw("CASE WHEN status = 'open' THEN 0 ELSE 1 END")->orderByDesc('pinned_at')->orderByDesc('updated_at')->limit(500)->get(),
         ]);
     }
 

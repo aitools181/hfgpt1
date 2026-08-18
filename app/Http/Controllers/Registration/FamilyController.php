@@ -45,8 +45,8 @@ class FamilyController extends Controller
         return Inertia::render('registration/families', [
             'families' => $query->latest()->paginate(25)->withQueryString(),
             'centers' => $scope->centers($user)->orderBy('name')->get(['id', 'name', 'code']),
-            'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->orderBy('name')->get(['id', 'center_id', 'name']),
-            'societies' => Society::query()->whereIn('center_id', $centerIds)->orderBy('name')->get(['id', 'center_id', 'sampark_area_id', 'name']),
+            'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->orderBy('name')->limit(2000)->get(['id', 'center_id', 'name']),
+            'societies' => Society::query()->whereIn('center_id', $centerIds)->orderBy('name')->limit(2000)->get(['id', 'center_id', 'sampark_area_id', 'name']),
             'filters' => $request->only(['search', 'center_id', 'source', 'status', 'gender']),
         ]);
     }
@@ -101,7 +101,7 @@ class FamilyController extends Controller
             ]);
             $family->update(['manual_reference' => sprintf('HF-%s-%06d', $family->center->code, $family->id)]);
             foreach ($data['members'] ?? [] as $member) $family->members()->create($member + ['status' => 'active']);
-        });
+        }, 3);
         return back()->with('success', 'Manual Sankalp Family registered successfully.');
     }
 
@@ -111,8 +111,8 @@ class FamilyController extends Controller
         $family->load(['center:id,name,code', 'area:id,name', 'society:id,name', 'members' => fn ($q) => $q->orderByDesc('is_head')->orderBy('name')]);
         return Inertia::render('registration/family-detail', [
             'family' => $family,
-            'areas' => SamparkArea::query()->where('center_id', $family->center_id)->where('status', 'active')->orderBy('name')->get(['id', 'name']),
-            'societies' => Society::query()->where('center_id', $family->center_id)->where('status', 'active')->orderBy('name')->get(['id', 'sampark_area_id', 'name']),
+            'areas' => SamparkArea::query()->where('center_id', $family->center_id)->where('status', 'active')->orderBy('name')->limit(2000)->get(['id', 'name']),
+            'societies' => Society::query()->where('center_id', $family->center_id)->where('status', 'active')->orderBy('name')->limit(2000)->get(['id', 'sampark_area_id', 'name']),
         ]);
     }
 
@@ -199,7 +199,7 @@ class FamilyController extends Controller
                     $audit->record('family_member', 'family_member_updated', FamilyMember::class, (string) $member->id, $oldMember, $newMember, $data['change_reason'], centerId: $locked->center_id);
                 }
             }
-        });
+        }, 3);
 
         return back()->with('success', 'Sankalp Family details updated with an audited change reason.');
     }

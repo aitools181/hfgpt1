@@ -89,7 +89,7 @@ class HomeVisitService
                 'new_badges' => $newBadges->pluck('milestone')->values()->all(),
                 'completion_report' => $this->reports->build($karyakar, $assignment->group, $visit),
             ];
-        });
+        }, 3);
     }
 
     private function resolveKaryakar(GroupFamilyAssignment $assignment, User $actor, array $data): array

@@ -47,9 +47,14 @@ class DashboardController extends Controller
 
         $managedUserCount = null;
         if ($user->hasPermission('manage_users')) {
-            $managedUserCount = $userScope->visibleUsers($user)->with('roles')->get()
-                ->filter(fn (User $candidate): bool => $userScope->canManageTarget($user, $candidate))
-                ->count();
+            // Do not materialize every portal user on the dashboard. This count may
+            // span thousands of users, so iterate in bounded Eloquent chunks.
+            $managedUserCount = 0;
+            foreach ($userScope->visibleUsers($user)->with('roles')->lazyById(250) as $candidate) {
+                if ($userScope->canManageTarget($user, $candidate)) {
+                    $managedUserCount++;
+                }
+            }
         }
 
         return Inertia::render('dashboard', [

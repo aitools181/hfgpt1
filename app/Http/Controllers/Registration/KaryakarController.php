@@ -57,7 +57,7 @@ class KaryakarController extends Controller
                 'karyakar_reference' => $this->nextReference((int) $data['center_id']), 'source' => 'manual',
                 'category' => $category->calculate((int) $data['age'], $data['gender']), 'status' => 'pending', 'nominated_by' => $request->user()->id,
             ]);
-        });
+        }, 3);
         return back()->with('success', "Karyakar {$karyakar->karyakar_reference} registered as Pending.");
     }
 
@@ -80,7 +80,7 @@ class KaryakarController extends Controller
                 'category' => $category->calculate($member->age, $member->gender), 'mobile' => $member->mobile,
                 'address' => $member->family->address, 'status' => 'pending', 'nominated_by' => $request->user()->id,
             ]);
-        });
+        }, 3);
         $member = $karyakar->member;
         return back()->with('success', "{$member->name} nominated as {$karyakar->category}; approval is pending.");
     }
@@ -89,15 +89,20 @@ class KaryakarController extends Controller
     {
         abort_unless($request->user()->canAccessCenterId($karyakar->center_id), 403);
         abort_unless($request->user()->hasPermission('approve_karyakar'), 403);
-        if ($karyakar->status !== 'pending') {
-            throw ValidationException::withMessages(['decision' => 'Only a Pending Sankalp Karyakar application can be Approved or Rejected.']);
-        }
         $data = $request->validate(['decision' => ['required', Rule::in(['approved', 'rejected'])], 'decision_note' => ['nullable', 'string', 'max:2000']]);
-        $karyakar->update([
-            'status' => $data['decision'], 'decision_note' => $data['decision_note'] ?? null,
-            'approved_by' => $data['decision'] === 'approved' ? $request->user()->id : null,
-            'approved_at' => $data['decision'] === 'approved' ? now() : null,
-        ]);
+
+        DB::transaction(function () use ($karyakar, $data, $request): void {
+            $locked = Karyakar::query()->whereKey($karyakar->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'pending') {
+                throw ValidationException::withMessages(['decision' => 'Only a Pending Sankalp Karyakar application can be Approved or Rejected.']);
+            }
+            $locked->update([
+                'status' => $data['decision'], 'decision_note' => $data['decision_note'] ?? null,
+                'approved_by' => $data['decision'] === 'approved' ? $request->user()->id : null,
+                'approved_at' => $data['decision'] === 'approved' ? now() : null,
+            ]);
+        }, 3);
+
         return back()->with('success', "Karyakar {$data['decision']} successfully.");
     }
 

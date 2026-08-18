@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\AuditTrail;
 use App\Services\OrganizationalScope;
 use App\Services\UserAdministrationScope;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,14 +31,25 @@ class UserController extends Controller
         $canResetPasswords = $actor->hasPermission('reset_user_passwords');
         abort_unless($canManageUsers || $canResetPasswords, 403);
 
-        $users = $userScope->visibleUsers($actor)
-            ->with('roles')
-            ->orderBy('name')
-            ->get()
-            ->filter(fn (User $user): bool => ($canManageUsers && $userScope->canManageTarget($actor, $user))
+        $userSearch = trim((string) $request->query('search', ''));
+        $candidateQuery = $userScope->visibleUsers($actor)->with('roles');
+        if ($userSearch !== '') {
+            $candidateQuery->where(function ($query) use ($userSearch): void {
+                $query->where('name', 'ilike', '%'.$userSearch.'%')
+                    ->orWhere('email', 'ilike', '%'.$userSearch.'%');
+            });
+        }
+
+        // The page is intentionally bounded. A global Super Admin installation can
+        // contain thousands of users; search finds any user without serializing the
+        // whole user table into one Inertia response.
+        $candidates = $candidateQuery->orderBy('name')->limit(501)->get();
+        $candidateLimitReached = $candidates->count() === 501;
+        $authorizedUsers = $candidates->filter(fn (User $user): bool => ($canManageUsers && $userScope->canManageTarget($actor, $user))
                 || ($canResetPasswords && $userScope->canResetPassword($actor, $user)))
-            ->values()
-            ->map(fn (User $user) => [
+            ->values();
+        $userListTruncated = $candidateLimitReached || $authorizedUsers->count() > 250;
+        $users = $authorizedUsers->take(250)->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
@@ -65,6 +77,8 @@ class UserController extends Controller
                 'karyakars' => [],
                 'canManageUsers' => false,
                 'canResetPasswords' => $canResetPasswords,
+                'userSearch' => $userSearch,
+                'userListTruncated' => $userListTruncated,
             ]);
         }
 
@@ -75,9 +89,29 @@ class UserController extends Controller
             'roles' => $userScope->assignableRoles($actor)->orderBy('name')->get(['id', 'name', 'slug', 'module']),
             'zones' => $scope->zones($actor)->where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']),
             'centers' => Center::query()->whereIn('id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'zone_id', 'name', 'code']),
-            'karyakars' => Karyakar::query()->whereIn('center_id', $centerIds)->where('status', 'approved')->orderBy('full_name')->get(['id', 'center_id', 'user_id', 'full_name', 'karyakar_reference']),
+            'karyakars' => [],
             'canManageUsers' => true,
             'canResetPasswords' => $canResetPasswords,
+            'userSearch' => $userSearch,
+            'userListTruncated' => $userListTruncated,
+        ]);
+    }
+
+    public function searchKaryakars(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'center_id' => ['required', 'integer', 'exists:centers,id'],
+            'q' => ['nullable', 'string', 'max:100'],
+        ]);
+        abort_unless($request->user()->hasPermission('manage_users'), 403);
+        abort_unless($request->user()->canAccessCenterId((int) $data['center_id']), 403, 'Center is outside your user-management scope.');
+        $search = trim((string) ($data['q'] ?? ''));
+        $query = Karyakar::query()->where('center_id', (int) $data['center_id'])->where('status', 'approved')->whereNull('user_id');
+        if ($search !== '') {
+            $query->where(fn ($q) => $q->where('full_name', 'ilike', '%'.$search.'%')->orWhere('karyakar_reference', 'ilike', '%'.$search.'%'));
+        }
+        return response()->json([
+            'results' => $query->orderBy('full_name')->limit(50)->get(['id', 'center_id', 'user_id', 'full_name', 'karyakar_reference']),
         ]);
     }
 
@@ -105,7 +139,7 @@ class UserController extends Controller
                 'center_id' => $data['center_id'] ?? null,
                 'karyakar_id' => $data['karyakar_id'] ?? null,
             ]);
-        });
+        }, 3);
 
         return back()->with('success', 'User created successfully.');
     }
@@ -137,7 +171,7 @@ class UserController extends Controller
                 'center_id' => $data['center_id'] ?? null,
                 'karyakar_id' => $data['karyakar_id'] ?? null,
             ]);
-        });
+        }, 3);
 
         return back()->with('success', 'User updated successfully.');
     }
@@ -189,7 +223,7 @@ class UserController extends Controller
                 $role?->pivot?->zone_id,
                 $role?->pivot?->center_id,
             );
-        });
+        }, 3);
 
         if ($actor->is($user)) {
             Auth::guard('web')->logout();

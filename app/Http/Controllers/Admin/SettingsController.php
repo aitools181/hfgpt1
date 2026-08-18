@@ -31,8 +31,12 @@ class SettingsController extends Controller
             'canManageRoles' => $canManageRoles,
             'canDelegatePasswordReset' => $canManageRoles && $user->hasRole('super_admin'),
             'centers' => Center::query()->whereIn('id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']),
-            'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->with('center:id,name,code')->orderBy('center_id')->orderBy('name')->get(),
-            'societies' => Society::query()->whereIn('center_id', $centerIds)->with(['center:id,name,code', 'area:id,name'])->orderBy('center_id')->orderBy('name')->get(),
+            'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->with('center:id,name,code')->orderBy('center_id')->orderBy('name')->limit(2000)->get(),
+            'societies' => Society::query()->whereIn('center_id', $centerIds)->with(['center:id,name,code', 'area:id,name'])->orderBy('center_id')->orderBy('name')->limit(2000)->get(),
+            'masterListsTruncated' => [
+                'areas' => SamparkArea::query()->whereIn('center_id', $centerIds)->count() > 2000,
+                'societies' => Society::query()->whereIn('center_id', $centerIds)->count() > 2000,
+            ],
             'categories' => KaryakarCategory::CATEGORIES,
         ]);
     }

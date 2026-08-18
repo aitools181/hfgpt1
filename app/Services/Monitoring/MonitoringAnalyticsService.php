@@ -119,6 +119,18 @@ class MonitoringAnalyticsService
         $targetCompleted = (int) (clone $targetQuery)->sum('completed_quantity');
         $balCompletedFamilies = $this->includeBalInMain($user) ? (int) $this->balCompletionQuery($filters, $centerIds)->sum('families_completed') : 0;
 
+        // Center metrics are the most expensive monitoring calculation. Compute
+        // them once per request and derive zone/leaderboard views in memory. The
+        // previous dashboard recomputed the same Center metrics up to five times.
+        $centerPerformance = $this->centerPerformance($user, $filters);
+        $zonePerformance = $this->aggregateZonePerformance($centerPerformance);
+        $centerLeaderboard = collect($centerPerformance)
+            ->sortByDesc('completion_percentage')->values()
+            ->map(fn (array $row, int $index) => ['rank' => $index + 1] + $row)->all();
+        $zoneLeaderboard = collect($zonePerformance)
+            ->sortByDesc('completion_percentage')->values()
+            ->map(fn (array $row, int $index) => ['rank' => $index + 1] + $row)->all();
+
         return [
             'filters' => $filters,
             'summary' => [
@@ -141,13 +153,13 @@ class MonitoringAnalyticsService
                 'completionPercentage' => $completionPercentage,
                 'homeVisits' => (clone $visitQuery)->count(),
             ],
-            'centerPerformance' => $this->centerPerformance($user, $filters),
-            'zonePerformance' => $this->zonePerformance($user, $filters),
+            'centerPerformance' => $centerPerformance,
+            'zonePerformance' => $zonePerformance,
             'genderDistribution' => $this->genderDistribution($filters, $centerIds),
             'categoryDistribution' => $this->categoryDistribution($filters, $centerIds),
             'completionTrend' => $this->completionTrend($user, $filters, $centerIds),
-            'centerLeaderboard' => $this->centerLeaderboard($user, $filters),
-            'zoneLeaderboard' => $this->zoneLeaderboard($user, $filters),
+            'centerLeaderboard' => $centerLeaderboard,
+            'zoneLeaderboard' => $zoneLeaderboard,
         ];
     }
 
@@ -212,9 +224,12 @@ class MonitoringAnalyticsService
 
     public function zonePerformance(User $user, array $filters = []): array
     {
-        $centers = collect($this->centerPerformance($user, $filters));
+        return $this->aggregateZonePerformance($this->centerPerformance($user, $filters));
+    }
 
-        return $centers->groupBy(fn (array $row) => (string) ($row['zone_id'] ?? 'none'))->map(function (Collection $rows): array {
+    private function aggregateZonePerformance(array $centerRows): array
+    {
+        return collect($centerRows)->groupBy(fn (array $row) => (string) ($row['zone_id'] ?? 'none'))->map(function (Collection $rows): array {
             $first = $rows->first();
             $assigned = (int) $rows->sum('assigned');
             $completed = (int) $rows->sum('completed');
@@ -275,10 +290,13 @@ class MonitoringAnalyticsService
         }
 
         return [
-            'centers' => Center::query()->whereIn('id', $centerIds)->orderBy('name')->get(['id', 'name', 'code']),
-            'groups' => $groups->get(['id', 'center_id', 'group_code']),
-            'karyakars' => $karyakars->get(['id', 'center_id', 'full_name', 'gender', 'category']),
-            'areas' => $areas->get(['id', 'center_id', 'name']),
+            // Filter dropdowns may contain thousands of lightweight rows. Use the
+            // base query builder so PHP does not hydrate thousands of Eloquent
+            // model objects just to serialize id/name labels.
+            'centers' => Center::query()->whereIn('id', $centerIds)->orderBy('name')->toBase()->get(['id', 'name', 'code']),
+            'groups' => $groups->toBase()->get(['id', 'center_id', 'group_code']),
+            'karyakars' => $karyakars->toBase()->get(['id', 'center_id', 'full_name', 'gender', 'category']),
+            'areas' => $areas->toBase()->get(['id', 'center_id', 'name']),
             'categories' => Karyakar::query()->whereIn('center_id', $centerIds)->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->values(),
         ];
     }
@@ -340,7 +358,9 @@ class MonitoringAnalyticsService
         }
 
         $query = $this->homeVisitQuery($filters, $centerIds)->whereBetween('completed_at', [$start->startOfDay(), $end->endOfDay()]);
-        $counts = $query->get(['completed_at'])->groupBy(fn (HomeVisit $visit) => $visit->completed_at->toDateString())->map->count();
+        $counts = $query->selectRaw('DATE(completed_at) as completion_day, COUNT(*) as total')
+            ->groupByRaw('DATE(completed_at)')
+            ->pluck('total', 'completion_day');
         $balCounts = collect();
         if ($this->includeBalInMain($user)) {
             $balCounts = $this->balCompletionQuery($filters, $centerIds)

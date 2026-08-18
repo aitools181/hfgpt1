@@ -55,7 +55,7 @@ export default function Analysis({ analysis, options }: Props) {
             <Leaderboard title="Center-wise Leaderboard" rows={analysis.centerLeaderboard} labelKey="center"/>
         </div>
 
-        <section className="hf-card mt-5 p-5 overflow-x-auto"><SectionTitle icon={<BarChart3 size={18}/>} title="Center Drill-down"/><table className="hf-table mt-3"><thead><tr><th>Center</th><th>Karyakars</th><th>Groups</th><th>Main Assigned</th><th>Main Completed</th><th>Bal Completed</th><th>Overall Completed</th><th>Main Pending</th><th>Main %</th></tr></thead><tbody>{analysis.centerPerformance.map((r)=><tr key={r.center_id}><td className="font-semibold">{r.center}</td><td>{r.karyakars}</td><td>{r.groups}</td><td>{r.assigned}</td><td>{r.completed}</td><td>{r.bal_completed ?? 0}</td><td>{r.overall_completed ?? r.completed}</td><td>{r.pending}</td><td>{r.completion_percentage}%</td></tr>)}</tbody></table></section>
+        <section className="hf-card mt-5 p-5 overflow-x-auto"><SectionTitle icon={<BarChart3 size={18}/>} title="Center Drill-down"/><div className="hf-table-scroll"><table className="hf-table hf-mobile-table mt-3"><thead><tr><th>Center</th><th>Karyakars</th><th>Groups</th><th>Main Assigned</th><th>Main Completed</th><th>Bal Completed</th><th>Overall Completed</th><th>Main Pending</th><th>Main %</th></tr></thead><tbody>{analysis.centerPerformance.map((r)=><tr key={r.center_id}><td className="font-semibold">{r.center}</td><td>{r.karyakars}</td><td>{r.groups}</td><td>{r.assigned}</td><td>{r.completed}</td><td>{r.bal_completed ?? 0}</td><td>{r.overall_completed ?? r.completed}</td><td>{r.pending}</td><td>{r.completion_percentage}%</td></tr>)}</tbody></table></div></section>
     </AppLayout>;
 }
 

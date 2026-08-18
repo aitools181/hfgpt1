@@ -91,32 +91,40 @@ class BalPravrutiService
     public function dashboard(User $user, array $input = []): array
     {
         $filters = $this->filters($user, $input);
-        $groups = $this->groupQuery($user, $filters)->with(['center.zone', 'sanchalak', 'children.member', 'completionReports'])->orderBy('group_code')->get();
-        $groupIds = $groups->pluck('id');
-        $reportQuery = $this->reportQuery($user, $filters, $groupIds);
+        $groupQuery = $this->groupQuery($user, $filters);
+        $groupIdSubquery = (clone $groupQuery)->select('bal_groups.id');
+        $reportQuery = $this->reportQuery($user, $filters, clone $groupIdSubquery);
 
+        $groups = (clone $groupQuery)->count();
+        $activeGroups = (clone $groupQuery)->where('status', 'active')->count();
+        $children = BalGroupChild::query()->whereIn('bal_group_id', clone $groupIdSubquery)->where('status', 'active')->count();
+        $sanchalaks = (clone $groupQuery)->whereNotNull('sanchalak_karyakar_id')->distinct()->count('sanchalak_karyakar_id');
         $reports = (clone $reportQuery)->count();
         $visited = (int) (clone $reportQuery)->sum('families_visited');
         $completed = (int) (clone $reportQuery)->sum('families_completed');
+
+        $centerPerformance = $this->centerPerformance($user, $filters);
 
         return [
             'filters' => $filters,
             'scopeLabel' => $this->scopeLabel($user),
             'summary' => [
-                'groups' => $groups->count(),
-                'activeGroups' => $groups->where('status', 'active')->count(),
-                'children' => BalGroupChild::query()->whereIn('bal_group_id', $groupIds)->where('status', 'active')->count(),
-                'sanchalaks' => $groups->pluck('sanchalak_karyakar_id')->filter()->unique()->count(),
+                'groups' => $groups,
+                'activeGroups' => $activeGroups,
+                'children' => $children,
+                'sanchalaks' => $sanchalaks,
                 'reports' => $reports,
                 'familiesVisited' => $visited,
                 'familiesCompleted' => $completed,
                 'completionRate' => $visited > 0 ? round(($completed / $visited) * 100, 2) : 0.0,
             ],
-            'centerPerformance' => $this->centerPerformance($user, $filters, $groups),
-            'zonePerformance' => $this->zonePerformance($user, $filters, $groups),
-            'groupPerformance' => $this->groupPerformance($groups, $filters),
-            'childGenderDistribution' => $this->childGenderDistribution($groupIds),
-            'sanchalakCategoryDistribution' => $this->sanchalakCategoryDistribution($groups),
+            'centerPerformance' => $centerPerformance,
+            'zonePerformance' => $this->zonePerformance($centerPerformance),
+            'groupPerformance' => $this->groupPerformance($user, $filters),
+            'groupPerformanceLimit' => 300,
+            'groupPerformanceTruncated' => $groups > 300,
+            'childGenderDistribution' => $this->childGenderDistribution(clone $groupIdSubquery),
+            'sanchalakCategoryDistribution' => $this->sanchalakCategoryDistribution($groupQuery),
             'completionTrend' => $this->completionTrend($reportQuery, $filters),
         ];
     }
@@ -201,7 +209,7 @@ class BalPravrutiService
             ], centerId: $group->center_id);
 
             return $group->fresh(['children.member.family', 'supervisors.user', 'sanchalak.user', 'center', 'area', 'society']);
-        });
+        }, 3);
     }
 
     public function submitCompletion(User $user, BalGroup $group, array $data): BalCompletionReport
@@ -245,63 +253,124 @@ class BalPravrutiService
             ], centerId: $group->center_id);
 
             return $report->fresh(['group', 'society', 'family', 'sanchalak']);
-        });
+        }, 3);
     }
 
     public function filterOptions(User $user): array
     {
         $groupQuery = $this->groupQuery($user);
-        $groups = (clone $groupQuery)->with('sanchalak')->get();
-        $centerIds = $groups->pluck('center_id')->unique();
-        if ($this->isBalAdministrator($user)) {
-            $centerIds = $this->allowedCenterIds($user);
-        }
+        $centerIds = $this->isBalAdministrator($user)
+            ? $this->allowedCenterIds($user)
+            : (clone $groupQuery)->select('bal_groups.center_id')->distinct()->pluck('bal_groups.center_id');
+
+        // Keep filter catalogs database-driven. Loading every Bal Group together
+        // with its Sanchalak caused analysis pages to scale linearly in PHP memory.
+        $categories = Karyakar::query()
+            ->whereNotNull('category')
+            ->whereIn('id', (clone $groupQuery)->whereNotNull('bal_groups.sanchalak_karyakar_id')->select('bal_groups.sanchalak_karyakar_id'))
+            ->distinct()
+            ->orderBy('category')
+            ->pluck('category')
+            ->values();
 
         return [
             'centers' => Center::query()->whereIn('id', $centerIds)->orderBy('name')->get(['id', 'name', 'code']),
-            'categories' => $groups->pluck('sanchalak.category')->filter()->unique()->sort()->values(),
+            'categories' => $categories,
         ];
     }
 
     public function creationOptions(User $user): array
     {
         $centerIds = $this->scope->centers($user)->pluck('id');
-        $children = FamilyMember::query()->with('family:id,center_id,external_family_id,manual_reference,head_name')
-            ->where('status', 'active')->whereBetween('age', [0, 12])
-            ->whereHas('family', fn (Builder $q) => $q->whereIn('center_id', $centerIds)->where('status', 'active'))
-            ->orderBy('name')->get();
-        $sanchalaks = Karyakar::query()->with('user.roles')->whereIn('center_id', $centerIds)->where('status', 'approved')
-            ->whereNotNull('user_id')
-            ->whereHas('user', fn (Builder $q) => $q->where('status', 'active')->whereHas('roles', fn (Builder $roles) => $roles->where('roles.slug', 'sanchalak')))
-            ->orderBy('full_name')->get();
-        $supervisors = User::query()->with('roles')->where('status', 'active')->whereHas('roles', function (Builder $q) use ($centerIds): void {
-            $q->whereIn('roles.slug', ['nirdeshak', 'nirikshak'])->whereIn('user_roles.center_id', $centerIds);
-        })->orderBy('name')->get();
 
+        // Large child/Karyakar/user catalogs are intentionally not embedded in
+        // the initial Inertia payload. They are searched on demand through
+        // searchCreationOptions(), keeping this page bounded at 100k-family scale.
         return [
             'centers' => Center::query()->whereIn('id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']),
-            'children' => $children,
-            'sanchalaks' => $sanchalaks,
-            'supervisors' => $supervisors,
-            'areas' => \App\Models\SamparkArea::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'center_id', 'name']),
-            'societies' => Society::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'center_id', 'sampark_area_id', 'name']),
+            'areas' => \App\Models\SamparkArea::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->limit(2000)->get(['id', 'center_id', 'name']),
+            'societies' => Society::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->limit(2000)->get(['id', 'center_id', 'sampark_area_id', 'name']),
         ];
+    }
+
+    public function searchCreationOptions(User $user, int $centerId, string $type, string $search = ''): array
+    {
+        abort_unless($user->hasPermission('manage_bal_groups'), 403);
+        abort_unless($this->scope->centers($user)->whereKey($centerId)->exists(), 403, 'Center is outside your permitted scope.');
+        $search = trim(mb_substr($search, 0, 100));
+
+        if ($type === 'child') {
+            $query = FamilyMember::query()
+                ->with('family:id,center_id,external_family_id,manual_reference,head_name')
+                ->where('status', 'active')
+                ->whereBetween('age', [0, 12])
+                ->whereHas('family', fn (Builder $q) => $q->where('center_id', $centerId)->where('status', 'active'));
+            if ($search !== '') {
+                $query->where(function (Builder $q) use ($search): void {
+                    $q->where('name', 'ilike', '%'.$search.'%')
+                        ->orWhereHas('family', function (Builder $family) use ($search): void {
+                            $family->where('head_name', 'ilike', '%'.$search.'%')
+                                ->orWhere('external_family_id', 'ilike', '%'.$search.'%')
+                                ->orWhere('manual_reference', 'ilike', '%'.$search.'%');
+                        });
+                });
+            }
+            return $query->orderBy('name')->limit(50)->get()->map(fn (FamilyMember $member) => [
+                'id' => $member->id,
+                'center_id' => $member->family?->center_id,
+                'name' => $member->name,
+                'gender' => $member->gender,
+                'age' => $member->age,
+                'family_reference' => $member->family?->external_family_id ?? $member->family?->manual_reference,
+                'family_head' => $member->family?->head_name,
+            ])->values()->all();
+        }
+
+        if ($type === 'sanchalak') {
+            $query = Karyakar::query()->where('center_id', $centerId)->where('status', 'approved')
+                ->whereNotNull('user_id')
+                ->whereHas('user', fn (Builder $q) => $q->where('status', 'active')->whereHas('roles', fn (Builder $roles) => $roles->where('roles.slug', 'sanchalak')));
+            if ($search !== '') {
+                $query->where(fn (Builder $q) => $q->where('full_name', 'ilike', '%'.$search.'%')->orWhere('karyakar_reference', 'ilike', '%'.$search.'%'));
+            }
+            return $query->orderBy('full_name')->limit(50)->get(['id', 'center_id', 'full_name', 'gender', 'category', 'user_id', 'karyakar_reference'])
+                ->map(fn (Karyakar $k) => [
+                    'id' => $k->id, 'center_id' => $k->center_id, 'full_name' => $k->full_name,
+                    'gender' => $k->gender, 'category' => $k->category, 'user_id' => $k->user_id,
+                    'karyakar_reference' => $k->karyakar_reference,
+                ])->values()->all();
+        }
+
+        if (in_array($type, ['nirdeshak', 'nirikshak'], true)) {
+            $query = User::query()->with('roles')->where('status', 'active')->whereHas('roles', function (Builder $q) use ($type, $centerId): void {
+                $q->where('roles.slug', $type)->where('user_roles.center_id', $centerId);
+            });
+            if ($search !== '') {
+                $query->where(fn (Builder $q) => $q->where('name', 'ilike', '%'.$search.'%')->orWhere('email', 'ilike', '%'.$search.'%'));
+            }
+            return $query->orderBy('name')->limit(50)->get(['id', 'name', 'email'])->map(fn (User $person) => [
+                'id' => $person->id,
+                'name' => $person->name,
+                'email' => $person->email,
+            ])->values()->all();
+        }
+
+        abort(422, 'Unsupported Bal Pravruti option search type.');
     }
 
     public function completionOptions(User $user): array
     {
-        $groups = $this->groupQuery($user, ['status' => 'active'])->with(['center', 'society'])->orderBy('group_code')->get();
+        $groups = $this->groupQuery($user, ['status' => 'active'])->with(['center', 'society'])->orderBy('group_code')->limit(500)->get();
         $centerIds = $groups->pluck('center_id')->unique();
         return [
             'groups' => $groups,
-            'societies' => Society::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->get(['id', 'center_id', 'name']),
-            'families' => Family::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('head_name')->get(['id', 'center_id', 'society_id', 'external_family_id', 'manual_reference', 'head_name']),
+            'societies' => Society::query()->whereIn('center_id', $centerIds)->where('status', 'active')->orderBy('name')->limit(2000)->get(['id', 'center_id', 'name']),
         ];
     }
 
-    public function reportQuery(User $user, array $filters, Collection|array|null $groupIds = null): Builder
+    public function reportQuery(User $user, array $filters, Builder|Collection|array|null $groupIds = null): Builder
     {
-        $groupIds ??= $this->groupQuery($user, $filters)->pluck('id');
+        $groupIds ??= $this->groupQuery($user, $filters)->select('bal_groups.id');
         $query = BalCompletionReport::query()->whereIn('bal_group_id', $groupIds);
         if ($filters['center_id']) $query->where('center_id', $filters['center_id']);
         if ($filters['date_from']) $query->whereDate('completion_date', '>=', $filters['date_from']);
@@ -309,13 +378,13 @@ class BalPravrutiService
         return $query;
     }
 
-    private function centerPerformance(User $user, array $filters, Collection $groups): array
+    private function centerPerformance(User $user, array $filters): array
     {
-        $centerIds = $this->isBalAdministrator($user) ? $this->allowedCenterIds($user) : $groups->pluck('center_id')->unique();
-        if ($filters['center_id']) $centerIds = collect([$filters['center_id']]);
-        return Center::query()->with('zone')->whereIn('id', $centerIds)->orderBy('name')->get()->map(function (Center $center) use ($user, $filters, $groups): array {
-            $centerGroupIds = $groups->where('center_id', $center->id)->pluck('id');
-            $reports = $this->reportQuery($user, $filters, $centerGroupIds);
+        $centerIds = $filters['center_id'] ? collect([$filters['center_id']]) : $this->allowedCenterIds($user);
+        return Center::query()->with('zone')->whereIn('id', $centerIds)->orderBy('name')->get()->map(function (Center $center) use ($user, $filters): array {
+            $groupQuery = $this->groupQuery($user, $filters)->where('bal_groups.center_id', $center->id);
+            $groupIdSubquery = (clone $groupQuery)->select('bal_groups.id');
+            $reports = $this->reportQuery($user, $filters, clone $groupIdSubquery);
             $visited = (int) (clone $reports)->sum('families_visited');
             $completed = (int) (clone $reports)->sum('families_completed');
             return [
@@ -324,8 +393,8 @@ class BalPravrutiService
                 'center_code' => $center->code,
                 'zone_id' => $center->zone_id,
                 'zone' => $center->zone?->name,
-                'groups' => $centerGroupIds->count(),
-                'children' => BalGroupChild::query()->whereIn('bal_group_id', $centerGroupIds)->where('status', 'active')->count(),
+                'groups' => (clone $groupQuery)->count(),
+                'children' => BalGroupChild::query()->whereIn('bal_group_id', clone $groupIdSubquery)->where('status', 'active')->count(),
                 'reports' => (clone $reports)->count(),
                 'families_visited' => $visited,
                 'families_completed' => $completed,
@@ -334,9 +403,9 @@ class BalPravrutiService
         })->values()->all();
     }
 
-    private function zonePerformance(User $user, array $filters, Collection $groups): array
+    private function zonePerformance(array $centerPerformance): array
     {
-        return collect($this->centerPerformance($user, $filters, $groups))->groupBy(fn (array $row) => (string) ($row['zone_id'] ?? 'none'))->map(function (Collection $rows): array {
+        return collect($centerPerformance)->groupBy(fn (array $row) => (string) ($row['zone_id'] ?? 'none'))->map(function (Collection $rows): array {
             $first = $rows->first();
             $visited = (int) $rows->sum('families_visited');
             $completed = (int) $rows->sum('families_completed');
@@ -353,30 +422,46 @@ class BalPravrutiService
         })->sortBy('zone')->values()->all();
     }
 
-    private function groupPerformance(Collection $groups, array $filters): array
+    private function groupPerformance(User $user, array $filters): array
     {
-        return $groups->map(function (BalGroup $group) use ($filters): array {
-            $reports = $group->completionReports;
-            if ($filters['date_from']) $reports = $reports->filter(fn (BalCompletionReport $r) => $r->completion_date->toDateString() >= $filters['date_from']);
-            if ($filters['date_to']) $reports = $reports->filter(fn (BalCompletionReport $r) => $r->completion_date->toDateString() <= $filters['date_to']);
-            $visited = (int) $reports->sum('families_visited');
-            $completed = (int) $reports->sum('families_completed');
+        $groups = $this->groupQuery($user, $filters)
+            ->with(['center:id,name', 'sanchalak:id,full_name'])
+            ->withCount(['children as active_children_count' => fn (Builder $q) => $q->where('status', 'active')])
+            ->orderBy('group_code')
+            ->limit(300)
+            ->get();
+        $groupIds = $groups->pluck('id');
+        if ($groupIds->isEmpty()) {
+            return [];
+        }
+
+        $aggregateQuery = BalCompletionReport::query()->whereIn('bal_group_id', $groupIds);
+        if ($filters['date_from']) $aggregateQuery->whereDate('completion_date', '>=', $filters['date_from']);
+        if ($filters['date_to']) $aggregateQuery->whereDate('completion_date', '<=', $filters['date_to']);
+        $aggregates = $aggregateQuery
+            ->selectRaw('bal_group_id, COUNT(*) as reports, COALESCE(SUM(families_visited),0) as visited, COALESCE(SUM(families_completed),0) as completed, MAX(completion_date) as last_completion_date')
+            ->groupBy('bal_group_id')->get()->keyBy('bal_group_id');
+
+        return $groups->map(function (BalGroup $group) use ($aggregates): array {
+            $row = $aggregates->get($group->id);
+            $visited = (int) ($row?->visited ?? 0);
+            $completed = (int) ($row?->completed ?? 0);
             return [
                 'group_id' => $group->id,
                 'group_code' => $group->group_code,
                 'center' => $group->center?->name,
                 'sanchalak' => $group->sanchalak?->full_name,
-                'children' => $group->children->where('status', 'active')->count(),
-                'reports' => $reports->count(),
+                'children' => (int) ($group->active_children_count ?? 0),
+                'reports' => (int) ($row?->reports ?? 0),
                 'families_visited' => $visited,
                 'families_completed' => $completed,
                 'completion_rate' => $visited > 0 ? round(($completed / $visited) * 100, 2) : 0.0,
-                'last_completion_date' => $reports->sortByDesc('completion_date')->first()?->completion_date?->toDateString(),
+                'last_completion_date' => $row?->last_completion_date ? (string) $row->last_completion_date : null,
             ];
         })->values()->all();
     }
 
-    private function childGenderDistribution(Collection $groupIds): array
+    private function childGenderDistribution(Builder|Collection|array $groupIds): array
     {
         $rows = BalGroupChild::query()->whereIn('bal_group_id', $groupIds)->where('bal_group_children.status', 'active')
             ->join('family_members', 'family_members.id', '=', 'bal_group_children.family_member_id')
@@ -387,12 +472,16 @@ class BalPravrutiService
         ];
     }
 
-    private function sanchalakCategoryDistribution(Collection $groups): array
+    private function sanchalakCategoryDistribution(Builder $groupQuery): array
     {
-        return $groups->pluck('sanchalak')->filter()->groupBy('category')->map(fn (Collection $items, string $category) => [
-            'label' => $category ?: 'Uncategorized',
-            'value' => $items->count(),
-        ])->values()->all();
+        return (clone $groupQuery)
+            ->join('karyakars', 'karyakars.id', '=', 'bal_groups.sanchalak_karyakar_id')
+            ->selectRaw("COALESCE(karyakars.category, 'Uncategorized') as label, COUNT(*) as value")
+            ->groupBy('karyakars.category')
+            ->orderByDesc('value')
+            ->get()
+            ->map(fn ($row) => ['label' => (string) $row->label, 'value' => (int) $row->value])
+            ->values()->all();
     }
 
     private function completionTrend(Builder $reportQuery, array $filters): array

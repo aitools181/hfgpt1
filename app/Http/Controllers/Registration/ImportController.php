@@ -8,6 +8,7 @@ use App\Models\ImportBatch;
 use App\Services\OrganizationalScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -42,7 +43,8 @@ class ImportController extends Controller
         try {
             ProcessRegistrationImport::dispatch($batch->id);
         } catch (\Throwable $e) {
-            $batch->update(['status' => 'failed', 'errors' => [['row' => null, 'message' => 'The import could not be queued.']], 'completed_at' => now()]);
+            Storage::disk('local')->delete($path);
+            $batch->update(['status' => 'failed', 'stored_path' => null, 'errors' => [['row' => null, 'message' => 'The import could not be queued.']], 'completed_at' => now()]);
             report($e);
             return back()->with('error', 'Import could not be queued. Review the application/queue logs.');
         }

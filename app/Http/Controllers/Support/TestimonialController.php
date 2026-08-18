@@ -23,7 +23,7 @@ class TestimonialController extends Controller
             });
         }
         return Inertia::render('support/testimonials', [
-            'testimonials' => $query->get(),
+            'testimonials' => $query->limit(500)->get(),
             'canManage' => $user->hasPermission('manage_testimonials'),
             'canSubmit' => $user->hasPermission('submit_testimonial'),
         ]);

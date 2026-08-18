@@ -77,6 +77,6 @@ class TargetService
                 'center_id', 'group_id', 'karyakar_id', 'sampark_area_id', 'society_id', 'start_date', 'end_date', 'target_quantity', 'status',
             ]), centerId: $target->center_id);
             return $target;
-        });
+        }, 3);
     }
 }

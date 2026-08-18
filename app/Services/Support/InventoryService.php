@@ -55,6 +55,6 @@ class InventoryService
             ]);
             $this->audit->record('inventory', $type, InventoryItem::class, (string) $locked->id, ['stock' => $before], ['stock' => $after, 'quantity' => $quantity], $note, centerId: $locked->center_id);
             return $transaction;
-        });
+        }, 3);
     }
 }
