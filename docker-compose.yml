@@ -32,9 +32,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       PGCONNECT_TIMEOUT: ${PGCONNECT_TIMEOUT:-5}
-      CACHE_STORE: file
+      CACHE_STORE: database
       QUEUE_CONNECTION: redis
-      SESSION_DRIVER: file
+      SESSION_DRIVER: database
+      SESSION_CONNECTION: pgsql
+      SESSION_TABLE: sessions
+      SESSION_ENCRYPT: "false"
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
       REDIS_CLIENT: phpredis
       REDIS_HOST: redis
@@ -68,7 +71,6 @@ services:
       - app_storage:/var/www/html/storage/app/public
       - app_private:/var/www/html/storage/app/private
       - app_logs:/var/www/html/storage/logs
-      - app_sessions:/var/www/html/storage/framework/sessions
     depends_on:
       db:
         condition: service_healthy
@@ -120,9 +122,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       PGCONNECT_TIMEOUT: ${PGCONNECT_TIMEOUT:-5}
-      CACHE_STORE: file
+      CACHE_STORE: database
       QUEUE_CONNECTION: redis
-      SESSION_DRIVER: file
+      SESSION_DRIVER: database
+      SESSION_CONNECTION: pgsql
+      SESSION_TABLE: sessions
+      SESSION_ENCRYPT: "false"
       REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -190,9 +195,12 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
       PGCONNECT_TIMEOUT: ${PGCONNECT_TIMEOUT:-5}
-      CACHE_STORE: file
+      CACHE_STORE: database
       QUEUE_CONNECTION: redis
-      SESSION_DRIVER: file
+      SESSION_DRIVER: database
+      SESSION_CONNECTION: pgsql
+      SESSION_TABLE: sessions
+      SESSION_ENCRYPT: "false"
       REDIS_CLIENT: phpredis
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -299,4 +307,3 @@ volumes:
   app_storage:
   app_private:
   app_logs:
-  app_sessions:

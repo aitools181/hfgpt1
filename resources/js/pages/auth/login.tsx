@@ -3,7 +3,7 @@ import { LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
 import type { PageProps } from '../../types';
 
 export default function Login() {
-    const page = usePage<PageProps>();
+    const page = usePage<PageProps<{ authInfrastructureError?: string | null }>>();
     const form = useForm({ email: '', password: '', remember: false });
     return <>
         <Head title="Login" />
@@ -19,6 +19,7 @@ export default function Login() {
                 </div>
                 <form className="hf-login-form" onSubmit={(e) => { e.preventDefault(); form.post('/login'); }}>
                     <div className="mb-1 flex items-center gap-2 text-xs font-bold text-[#70507c]"><ShieldCheck size={16}/> Secure role-based sign in</div>
+                    {page.props.authInfrastructureError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{page.props.authInfrastructureError}</div>}
                     {page.props.flash.success && <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{page.props.flash.success}</div>}
                     {page.props.flash.error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{page.props.flash.error}</div>}
                     <div>

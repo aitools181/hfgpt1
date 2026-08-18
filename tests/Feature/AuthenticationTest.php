@@ -26,6 +26,28 @@ class AuthenticationTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_active_user_can_login_with_database_backed_session(): void
+    {
+        config()->set('session.driver', 'database');
+        config()->set('session.connection', 'sqlite');
+        config()->set('session.table', 'sessions');
+        config()->set('session.encrypt', false);
+
+        $this->seed(RolePermissionSeeder::class);
+        $user = User::query()->create(['name' => 'DB Session Admin', 'email' => 'db-session@example.test', 'password' => 'StrongPassword123!', 'status' => 'active']);
+
+        $this->post('/login', ['email' => $user->email, 'password' => 'StrongPassword123!'])
+            ->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_login_route_uses_controller_fail_open_rate_limiter_instead_of_framework_throttle_middleware(): void
+    {
+        $route = app('router')->getRoutes()->getByName('login.store');
+        $this->assertNotNull($route);
+        $this->assertNotContains('throttle:10,1', $route->gatherMiddleware());
+    }
+
 
     public function test_login_is_not_blocked_if_authentication_audit_table_is_temporarily_unavailable(): void
     {

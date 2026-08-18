@@ -31,7 +31,6 @@ Persistent volumes:
 - app_storage
 - app_private
 - app_logs
-- app_sessions
 ```
 
 Nginx and PHP-FPM intentionally share the `web` container so public HTTP traffic never depends on cross-container FastCGI DNS. Background queue and scheduler workloads remain isolated in their own containers.

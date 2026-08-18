@@ -1,4 +1,4 @@
-# Production Operations Runbook - v1.0.10
+# Production Operations Runbook - v1.0.11
 
 ## Daily / routine checks
 
@@ -96,3 +96,13 @@ Changing the GitHub repository from public to private does not terminate already
 ## Security operations
 
 Keep `APP_DEBUG=false`, HTTPS + secure session cookie enabled, database/Redis unexposed, unique secrets, and password-reset authority narrowly delegated. Review Audit Logs after administrative changes.
+
+## Login/runtime incident capture - v1.0.11+
+
+Before redeploying a failing instance, preserve the evidence:
+
+```bash
+./scripts/diagnose_login_runtime.sh "$APP_URL"
+```
+
+The script checks Compose health/restart counters, `/up`, `/health/live`, `/health/ready`, `/login`, the authentication preflight and recent authentication/session errors. A browser `Server Not Found` is a DNS/reachability symptom and must be investigated outside Laravel.

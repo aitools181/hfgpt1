@@ -3,30 +3,33 @@ set -eu
 
 cd "$(dirname "$0")/.."
 
-echo "[1/12] PHP syntax"
+echo "[1/13] PHP syntax"
 find app bootstrap config database routes tests scripts -type f -name '*.php' -print0 | xargs -0 -n1 php -l >/tmp/happy-family-php-lint.txt
 
-echo "[2/12] Static source integrity"
+echo "[2/13] Static source integrity"
 python3 scripts/static_integrity_check.py
 
-echo "[3/12] Runtime supervisor behavior"
+echo "[3/13] Authentication runtime invariants"
+scripts/test_auth_runtime_config.sh
+
+echo "[4/13] Runtime supervisor behavior"
 scripts/test_web_watchdog.sh
 
-echo "[4/12] Runtime healthcheck + bootstrap behavior"
+echo "[5/13] Runtime healthcheck + bootstrap behavior"
 scripts/test_runtime_healthchecks.sh
 scripts/test_bootstrap_validation.sh
 
-echo "[5/12] Background worker/scheduler self-healing"
+echo "[6/13] Background worker/scheduler self-healing"
 scripts/test_background_supervisor.sh
 
-echo "[6/12] 100k-row import streaming / safety"
+echo "[7/13] 100k-row import streaming / safety"
 php scripts/test_tabular_streaming.php
 
-echo "[7/12] Composer and NPM manifests"
+echo "[8/13] Composer and NPM manifests"
 php -r '$j=json_decode(file_get_contents("composer.json"), true, 512, JSON_THROW_ON_ERROR); if (!isset($j["require"]["laravel/framework"])) exit(1);'
 node -e 'JSON.parse(require("fs").readFileSync("package.json","utf8"))'
 
-echo "[8/12] Docker Compose YAML + failure-prevention invariants"
+echo "[9/13] Docker Compose YAML + failure-prevention invariants"
 python3 - <<'PY'
 import re
 import yaml
@@ -67,9 +70,10 @@ for key in (
 ):
     assert key in web_env, f'{key} missing from web environment'
 assert '__laravel_health' in str(web_env['WEB_WATCHDOG_URL'])
-assert web_env.get('SESSION_DRIVER') == 'file', 'web sessions must be Redis-independent'
-assert web_env.get('CACHE_STORE') == 'file', 'web cache must be Redis-independent'
-assert 'app_sessions:/var/www/html/storage/framework/sessions' in web.get('volumes', []), 'persistent file sessions volume missing'
+assert web_env.get('SESSION_DRIVER') == 'database', 'web sessions must use the database backend'
+assert web_env.get('SESSION_CONNECTION') == 'pgsql', 'web database sessions must use pgsql'
+assert web_env.get('SESSION_ENCRYPT') == 'false', 'database session payload encryption must remain disabled'
+assert web_env.get('CACHE_STORE') == 'database', 'web cache/rate limiter must use the database backend'
 assert 'redis' not in web.get('depends_on', {}), 'web startup must not depend on Redis queue availability'
 
 worker_command=' '.join(map(str,services['worker'].get('command',[])))
@@ -104,6 +108,7 @@ nginx=open('docker/nginx/default.conf',encoding='utf-8').read()
 assert 'location = /monitoring/reports/export' in nginx and 'fastcgi_pass 127.0.0.1:9002' in nginx
 assert 'location = /__fpm_health' in nginx and 'fastcgi_pass 127.0.0.1:9001' in nginx
 assert 'location = /__laravel_health' in nginx and 'fastcgi_pass 127.0.0.1:9003' in nginx and 'fastcgi_param REQUEST_URI /up' in nginx
+assert 'location = /health/live' in nginx and 'location = /health/ready' in nginx, 'public health endpoints must use isolated health pool'
 assert 'access_log /dev/stdout' in nginx and 'error_log /dev/stderr' in nginx
 web_supervisor=open('docker/web-start.sh',encoding='utf-8').read()
 for token in ('WEB_INFRA_PROBE_INTERVAL_SECONDS','Nginx PID was alive but health endpoint was unresponsive','PHP-FPM master PID was alive but control pool was unresponsive','WEB_PROCESS_RESTART_BACKOFF_SECONDS'):
@@ -114,10 +119,10 @@ entrypoint=open('docker/entrypoint.sh',encoding='utf-8').read()
 assert 'validate_app_key' in entrypoint and 'validate_app_url' in entrypoint
 PY
 
-echo "[9/12] Shell syntax"
+echo "[10/13] Shell syntax"
 find docker scripts -type f -name '*.sh' -print0 | xargs -0 -n1 sh -n
 
-echo "[10/12] Runtime dependencies"
+echo "[11/13] Runtime dependencies"
 if [ ! -f vendor/autoload.php ]; then
   echo "vendor/ is missing. Run: composer install" >&2
   exit 2
@@ -127,7 +132,7 @@ if [ ! -d node_modules ]; then
   exit 2
 fi
 
-echo "[11/12] Automated tests and frontend checks"
+echo "[12/13] Automated tests and frontend checks"
 php artisan config:clear
 php artisan test
 npm run types:check
@@ -135,5 +140,5 @@ npm run build
 php artisan route:cache
 php artisan config:cache
 
-echo "[12/12] Release check complete"
+echo "[13/13] Release check complete"
 echo "PASS"

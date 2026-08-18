@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.10
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.11
 
 Deploy this repository as a **Docker Compose** resource. Do not deploy the Dockerfile as a single Coolify Application and do not upload `vendor/` or `node_modules/`.
 
@@ -115,9 +115,8 @@ Do not delete these during upgrades:
 - `app_storage`
 - `app_private`
 - `app_logs`
-- `app_sessions`
 
-`app_sessions` preserves authenticated file sessions across web container recreation. Redis is queue-focused; a temporary Redis outage therefore does not take down normal logged-in web requests.
+Authenticated sessions and rate-limit cache are PostgreSQL-backed. This avoids container filesystem permission drift and keeps Redis queue-focused; a temporary Redis outage therefore does not invalidate normal logged-in web sessions.
 
 ## 7. Startup order
 

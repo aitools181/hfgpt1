@@ -32,6 +32,8 @@ jobs:
         run: find app bootstrap config database routes tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Static source integrity
         run: python3 scripts/static_integrity_check.py
+      - name: Authentication runtime invariants
+        run: scripts/test_auth_runtime_config.sh
       - name: Web watchdog behavior
         run: scripts/test_web_watchdog.sh
       - name: Runtime healthcheck behavior
@@ -129,8 +131,8 @@ jobs:
             exit 1
           fi
 
-          # Production authentication smoke test. This exercises the real file
-          # session driver, CSRF middleware, seeded Super Admin, login side
+          # Production authentication smoke test. This exercises the real
+          # PostgreSQL session/cache backends, CSRF middleware, seeded Super Admin, login side
           # effects and the first authenticated dashboard request. A previous
           # regression could pass /health/ready but fail only after credentials
           # were submitted, so CI must cover the complete browser login path.
@@ -151,6 +153,10 @@ jobs:
           dashboard_status=$(curl -sS -o /tmp/hf-dashboard.html -w '%{http_code}' -b /tmp/hf-cookies.txt http://127.0.0.1/)
           test "$dashboard_status" = "200"
           grep -q 'Happy Family' /tmp/hf-dashboard.html
+          session_rows=$(docker compose exec -T db psql -U happy_family -d happy_family -Atc "select count(*) from sessions where user_id = (select id from users where lower(email) = 'admin@example.invalid');" | tr -d '\r')
+          test "${session_rows:-0}" -ge 1
+          cache_table=$(docker compose exec -T db psql -U happy_family -d happy_family -Atc "select to_regclass('public.cache');" | tr -d '\r')
+          test "$cache_table" = "cache"
           echo 'Production login + authenticated dashboard smoke test passed.'
 
           # Start background services too and verify their init:true-aware health checks.

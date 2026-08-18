@@ -22,8 +22,6 @@ use App\Http\Controllers\Registration\ImportController;
 use App\Http\Controllers\Registration\KaryakarController;
 use App\Http\Controllers\Monitoring\AnalysisController;
 use App\Http\Controllers\Monitoring\ReportController;
-use App\Http\Controllers\HealthController;
-use App\Http\Controllers\LiveHealthController;
 use App\Http\Controllers\Support\AnnouncementController;
 use App\Http\Controllers\Support\CorrectionRequestController;
 use App\Http\Controllers\Support\FamilyTimeController;
@@ -32,21 +30,11 @@ use App\Http\Controllers\Support\SharedContentController;
 use App\Http\Controllers\Support\StickyNoteController;
 use App\Http\Controllers\Support\SupportRequestController;
 use App\Http\Controllers\Support\TestimonialController;
-use App\Http\Middleware\HandleInertiaRequests;
-use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
-
-// Health endpoints must not open a Redis-backed session. This keeps liveness
-// independent from Redis and lets readiness report a dependency failure instead
-// of failing inside StartSession before the controller can run.
-$healthMiddleware = [StartSession::class, ShareErrorsFromSession::class, HandleInertiaRequests::class];
-Route::get('/health/live', LiveHealthController::class)->withoutMiddleware($healthMiddleware)->name('health.live');
-Route::get('/health/ready', HealthController::class)->withoutMiddleware($healthMiddleware)->name('health.ready');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
-    Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:10,1')->name('login.store');
+    Route::post('/login', [LoginController::class, 'store'])->name('login.store');
 });
 
 Route::middleware(['auth', 'active'])->group(function (): void {
