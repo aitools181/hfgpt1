@@ -6,10 +6,10 @@ return [
         'sync' => ['driver' => 'sync'],
         'redis' => [
             'driver' => 'redis',
-            'connection' => 'default',
+            'connection' => 'queue',
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 1200),
-            'block_for' => 5,
+            'block_for' => (int) env('REDIS_QUEUE_BLOCK_FOR', 5),
         ],
     ],
     'failed' => [

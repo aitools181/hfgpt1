@@ -43,6 +43,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_QUEUE_BLOCK_FOR: ${REDIS_QUEUE_BLOCK_FOR:-5}
+      REDIS_QUEUE_READ_TIMEOUT: ${REDIS_QUEUE_READ_TIMEOUT:-15}
       FILESYSTEM_DISK: public
       RUN_MIGRATIONS: "true"
       SEED_ON_BOOT: ${SEED_ON_BOOT:-true}
@@ -132,6 +134,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_QUEUE_BLOCK_FOR: ${REDIS_QUEUE_BLOCK_FOR:-5}
+      REDIS_QUEUE_READ_TIMEOUT: ${REDIS_QUEUE_READ_TIMEOUT:-15}
       FILESYSTEM_DISK: public
       RUN_MIGRATIONS: "false"
     volumes:
@@ -205,6 +209,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_QUEUE_BLOCK_FOR: ${REDIS_QUEUE_BLOCK_FOR:-5}
+      REDIS_QUEUE_READ_TIMEOUT: ${REDIS_QUEUE_READ_TIMEOUT:-15}
       FILESYSTEM_DISK: public
       RUN_MIGRATIONS: "false"
     volumes:
@@ -285,6 +291,8 @@ services:
     stop_grace_period: 30s
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_QUEUE_BLOCK_FOR: ${REDIS_QUEUE_BLOCK_FOR:-5}
+      REDIS_QUEUE_READ_TIMEOUT: ${REDIS_QUEUE_READ_TIMEOUT:-15}
       REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-160mb}
     command: ["/bin/sh", "-c", "exec redis-server --appendonly yes --auto-aof-rewrite-percentage 100 --auto-aof-rewrite-min-size 64mb --maxmemory \"$$REDIS_MAXMEMORY\" --maxmemory-policy noeviction $${REDIS_PASSWORD:+--requirepass \"$$REDIS_PASSWORD\"}"]
     volumes:

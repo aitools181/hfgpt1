@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.12 - Redis queue timeout and production host diagnostics - 2026-08-19
+
+- Fixed a confirmed Redis queue configuration bug where `block_for=5` seconds was paired with a global PhpRedis `read_timeout=2` seconds, causing recurring `RedisException: read error on connection to redis:6379` while workers waited normally for jobs.
+- Added a dedicated Redis `queue` connection with a 15-second default read timeout, while retaining the short 2-second timeout for normal web/cache Redis operations.
+- Made `REDIS_QUEUE_BLOCK_FOR` and `REDIS_QUEUE_READ_TIMEOUT` explicit environment settings and propagated them to all Laravel runtime services.
+- Added production guidance for the Redis host requirement `vm.overcommit_memory=1`; this is a host-kernel setting and cannot be safely fixed from an unprivileged application container.
+- Documented the hostname mismatch seen in production screenshots (`divyaivan.com`) versus successful Nginx requests (`divyajivan.com`) so external Server Not Found incidents are not misdiagnosed as Laravel health failures.
+
 ## 1.0.11 - Login/session root fix and independent health diagnostics - 2026-08-18
 
 - Removed the framework route-level login throttle that could fail before controller-level fail-open rate-limit handling when the cache backend was unavailable.

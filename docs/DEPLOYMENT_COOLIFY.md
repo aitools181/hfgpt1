@@ -1,4 +1,4 @@
-# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.11
+# Coolify Deployment Guide - SMVS Happy Family Portal v1.0.12
 
 Deploy this repository as a **Docker Compose** resource. Do not deploy the Dockerfile as a single Coolify Application and do not upload `vendor/` or `node_modules/`.
 
@@ -197,3 +197,17 @@ journalctl -k --since "2 hours ago" | grep -Ei 'out of memory|oom|killed process
 ## 13. Production acceptance
 
 A release is production-accepted only after the exact commit is green in GitHub CI and the deployed target passes health + smoke/acceptance checks. The packaging environment cannot execute Docker/Composer/NPM runtime integration, so those checks are intentionally performed by CI/Coolify rather than claimed without evidence.
+
+## Redis host kernel requirement
+
+On the Coolify/Docker host, Redis recommends Linux `vm.overcommit_memory=1` so background fork/persistence operations remain reliable. Run once as root:
+
+```bash
+sysctl -w vm.overcommit_memory=1
+printf 'vm.overcommit_memory = 1\n' > /etc/sysctl.d/99-redis-overcommit.conf
+sysctl --system
+```
+
+Verify with `sysctl vm.overcommit_memory`. This is a host-kernel setting and cannot be reliably applied from the unprivileged Redis application container.
+
+The queue uses `REDIS_QUEUE_BLOCK_FOR=5` and `REDIS_QUEUE_READ_TIMEOUT=15` by default. Keep the queue read timeout greater than the block interval.
