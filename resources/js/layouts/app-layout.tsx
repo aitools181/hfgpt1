@@ -37,39 +37,50 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 const SIDEBAR_SCROLL_KEY = 'happy-family:desktop-sidebar-scroll';
 
-type NavItem = { label: string; shortLabel?: string; href: string; icon: LucideIcon; permission?: string | null; permissionsAny?: string[]; roleSlugs?: string[] };
+type NavSection = 'Overview' | 'Registration' | 'Execution' | 'Bal Pravruti' | 'Monitoring' | 'Support' | 'Administration';
+type NavItem = {
+    label: string;
+    shortLabel?: string;
+    href: string;
+    icon: LucideIcon;
+    section: NavSection;
+    permission?: string | null;
+    permissionsAny?: string[];
+    roleSlugs?: string[];
+};
 
 const navigation: NavItem[] = [
-    { label: 'Dashboard', shortLabel: 'Home', href: '/', icon: Home, permission: null },
-    { label: 'Zones', href: '/admin/zones', icon: MapPinned, permission: 'manage_zones' },
-    { label: 'Centers', href: '/admin/centers', icon: Building2, permission: 'view_center' },
-    { label: 'Users', href: '/admin/users', icon: Users, permissionsAny: ['manage_users', 'reset_user_passwords'] },
-    { label: 'Families', href: '/registration/families', icon: UsersRound, permission: 'register_family' },
-    { label: 'Karyakars', href: '/registration/karyakars', icon: UserRoundCheck, permission: 'register_karyakar' },
-    { label: 'SMVS Import', href: '/registration/imports', icon: Upload, permission: 'register_family' },
-    { label: 'Groups', href: '/assignments/groups', icon: Network, permission: 'view_own_assignments' },
-    { label: 'Area / Society', href: '/assignments/areas', icon: Map, permission: 'assign_area_society' },
-    { label: 'Targets', href: '/assignments/targets', icon: Target, permission: 'assign_target' },
-    { label: 'My Target', shortLabel: 'Target', href: '/field/my-target', icon: Target, permission: 'mark_home_visit', roleSlugs: ['karyakar', 'super_admin'] },
-    { label: 'Reminders / Alerts', shortLabel: 'Alerts', href: '/field/reminders', icon: BellRing, permission: 'view_own_assignments', roleSlugs: ['karyakar', 'super_admin', 'bn_karyalay_admin', 'zonal_admin', 'center_admin', 'computer_op'] },
-    { label: 'Bal Dashboard', shortLabel: 'Bal', href: '/bal-pravruti', icon: Baby, permission: 'access_bal_pravruti' },
-    { label: 'Bal Groups', href: '/bal-pravruti/groups', icon: UsersRound, permission: 'access_bal_pravruti' },
-    { label: 'Bal Completion', href: '/bal-pravruti/completions', icon: ClipboardCheck, permission: 'submit_bal_completion', roleSlugs: ['sanchalak'] },
-    { label: 'Bal Analysis', href: '/bal-pravruti/analysis', icon: BarChart3, permission: 'view_bal_analysis' },
-    { label: 'Analysis', href: '/monitoring/analysis', icon: BarChart3, permission: 'view_reports_analysis' },
-    { label: 'Reports', shortLabel: 'Reports', href: '/monitoring/reports', icon: FileText, permission: 'view_reports_analysis' },
-    { label: 'Announcements', href: '/support/announcements', icon: Megaphone, permission: 'view_announcements' },
-    { label: 'Family Time', href: '/support/family-time', icon: CalendarDays, permission: 'view_family_time' },
-    { label: 'Shared Content', href: '/support/content', icon: Library, permission: 'view_shared_content' },
-    { label: 'Testimonials', href: '/support/testimonials', icon: MessageSquareQuote, permission: 'view_testimonials' },
-    { label: 'Inventory', href: '/support/inventory', icon: PackageOpen, permission: 'view_inventory' },
-    { label: 'Sticky Notes', href: '/support/sticky-notes', icon: StickyNote, permission: 'use_sticky_notes' },
-    { label: 'Correction Requests', href: '/support/corrections', icon: ClipboardCheck, permission: 'submit_correction_request' },
-    { label: 'Contact Support', href: '/support/contact', icon: LifeBuoy, permission: 'contact_support' },
-    { label: 'Audit Logs', href: '/admin/audit-logs', icon: Activity, permission: 'view_audit_logs' },
-    { label: 'Settings', href: '/admin/settings', icon: Settings, permission: 'manage_master_data' },
+    { label: 'Dashboard', shortLabel: 'Home', href: '/', icon: Home, section: 'Overview', permission: null },
+    { label: 'Families', href: '/registration/families', icon: UsersRound, section: 'Registration', permission: 'register_family' },
+    { label: 'Karyakars', href: '/registration/karyakars', icon: UserRoundCheck, section: 'Registration', permission: 'register_karyakar' },
+    { label: 'SMVS Import', href: '/registration/imports', icon: Upload, section: 'Registration', permission: 'register_family' },
+    { label: 'Groups', href: '/assignments/groups', icon: Network, section: 'Execution', permission: 'view_own_assignments' },
+    { label: 'Area / Society', href: '/assignments/areas', icon: Map, section: 'Execution', permission: 'assign_area_society' },
+    { label: 'Targets', href: '/assignments/targets', icon: Target, section: 'Execution', permission: 'assign_target' },
+    { label: 'My Target', shortLabel: 'Target', href: '/field/my-target', icon: Target, section: 'Execution', permission: 'mark_home_visit', roleSlugs: ['karyakar', 'super_admin'] },
+    { label: 'Reminders / Alerts', shortLabel: 'Alerts', href: '/field/reminders', icon: BellRing, section: 'Execution', permission: 'view_own_assignments', roleSlugs: ['karyakar', 'super_admin', 'bn_karyalay_admin', 'zonal_admin', 'center_admin', 'computer_op'] },
+    { label: 'Bal Dashboard', shortLabel: 'Bal', href: '/bal-pravruti', icon: Baby, section: 'Bal Pravruti', permission: 'access_bal_pravruti' },
+    { label: 'Bal Groups', href: '/bal-pravruti/groups', icon: UsersRound, section: 'Bal Pravruti', permission: 'access_bal_pravruti' },
+    { label: 'Bal Completion', href: '/bal-pravruti/completions', icon: ClipboardCheck, section: 'Bal Pravruti', permission: 'submit_bal_completion', roleSlugs: ['sanchalak'] },
+    { label: 'Bal Analysis', href: '/bal-pravruti/analysis', icon: BarChart3, section: 'Bal Pravruti', permission: 'view_bal_analysis' },
+    { label: 'Analysis', href: '/monitoring/analysis', icon: BarChart3, section: 'Monitoring', permission: 'view_reports_analysis' },
+    { label: 'Reports', shortLabel: 'Reports', href: '/monitoring/reports', icon: FileText, section: 'Monitoring', permission: 'view_reports_analysis' },
+    { label: 'Announcements', href: '/support/announcements', icon: Megaphone, section: 'Support', permission: 'view_announcements' },
+    { label: 'Family Time', href: '/support/family-time', icon: CalendarDays, section: 'Support', permission: 'view_family_time' },
+    { label: 'Shared Content', href: '/support/content', icon: Library, section: 'Support', permission: 'view_shared_content' },
+    { label: 'Testimonials', href: '/support/testimonials', icon: MessageSquareQuote, section: 'Support', permission: 'view_testimonials' },
+    { label: 'Inventory', href: '/support/inventory', icon: PackageOpen, section: 'Support', permission: 'view_inventory' },
+    { label: 'Sticky Notes', href: '/support/sticky-notes', icon: StickyNote, section: 'Support', permission: 'use_sticky_notes' },
+    { label: 'Correction Requests', href: '/support/corrections', icon: ClipboardCheck, section: 'Support', permission: 'submit_correction_request' },
+    { label: 'Contact Support', href: '/support/contact', icon: LifeBuoy, section: 'Support', permission: 'contact_support' },
+    { label: 'Zones', href: '/admin/zones', icon: MapPinned, section: 'Administration', permission: 'manage_zones' },
+    { label: 'Centers', href: '/admin/centers', icon: Building2, section: 'Administration', permission: 'view_center' },
+    { label: 'Users', href: '/admin/users', icon: Users, section: 'Administration', permissionsAny: ['manage_users', 'reset_user_passwords'] },
+    { label: 'Audit Logs', href: '/admin/audit-logs', icon: Activity, section: 'Administration', permission: 'view_audit_logs' },
+    { label: 'Settings', href: '/admin/settings', icon: Settings, section: 'Administration', permission: 'manage_master_data' },
 ];
 
+const sectionOrder: NavSection[] = ['Overview', 'Registration', 'Execution', 'Bal Pravruti', 'Monitoring', 'Support', 'Administration'];
 const preferredMobileTabs = ['/', '/field/my-target', '/assignments/groups', '/monitoring/reports', '/bal-pravruti'];
 
 export default function AppLayout({ title, children }: { title: string; children: ReactNode }) {
@@ -86,6 +97,7 @@ export default function AppLayout({ title, children }: { title: string; children
         const roleAllowed = !item.roleSlugs?.length || item.roleSlugs.some((slug) => user.roles.some((assigned) => assigned.slug === slug));
         return permissionAllowed && roleAllowed;
     };
+
     const currentPath = page.url.split('?')[0].replace(/\/$/, '') || '/';
     const visibleNavigation = navigation.filter(visible);
     const matchesPath = (href: string) => {
@@ -93,10 +105,15 @@ export default function AppLayout({ title, children }: { title: string; children
         if (normalizedHref === '/') return currentPath === '/';
         return currentPath === normalizedHref || currentPath.startsWith(`${normalizedHref}/`);
     };
-    const activeHref = visibleNavigation
+    const activeItem = visibleNavigation
         .filter((item) => matchesPath(item.href))
-        .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+        .sort((a, b) => b.href.length - a.href.length)[0];
+    const activeHref = activeItem?.href;
     const isActive = (href: string) => href === activeHref;
+
+    const groupedNavigation = sectionOrder
+        .map((section) => ({ section, items: visibleNavigation.filter((item) => item.section === section) }))
+        .filter((group) => group.items.length > 0);
 
     const mobileTabs = useMemo(() => {
         const chosen = preferredMobileTabs
@@ -170,51 +187,82 @@ export default function AppLayout({ title, children }: { title: string; children
 
     const userInitial = user.name.trim().charAt(0).toUpperCase() || 'U';
     const moreActive = Boolean(activeHref && !mobileTabs.some((item) => item.href === activeHref));
+    const ActiveIcon = activeItem?.icon ?? Home;
 
     return (
-        <div className="hf-shell lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:items-start lg:overflow-hidden">
+        <div className="hf-shell lg:grid lg:h-screen lg:grid-cols-[276px_1fr] lg:items-start lg:overflow-hidden">
             <aside
                 ref={sidebarRef}
                 onScroll={rememberSidebarScroll}
-                className="hf-sidebar hf-desktop-sidebar min-h-screen p-5 lg:sticky lg:top-0 lg:h-screen lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
+                className="hf-sidebar hf-desktop-sidebar min-h-screen lg:sticky lg:top-0 lg:h-screen lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
             >
-                <div className="hf-brand rounded-2xl p-4 mb-6">
-                    <div className="text-xs uppercase tracking-[.18em] opacity-80">SMVS</div>
-                    <div className="text-xl font-extrabold mt-1">Happy Family</div>
-                    <div className="text-xs mt-1 opacity-80">Stronger Families, Stronger Society</div>
+                <div className="hf-sidebar-top">
+                    <div className="hf-sidebar-brand">
+                        <img src="/app-icon.svg" alt="" className="hf-sidebar-logo" />
+                        <div className="min-w-0">
+                            <div className="hf-sidebar-brand-kicker">SMVS</div>
+                            <div className="hf-sidebar-brand-title">Happy Family</div>
+                            <div className="hf-sidebar-brand-subtitle">Family campaign portal</div>
+                        </div>
+                    </div>
                 </div>
-                <nav className="space-y-1">
-                    {visibleNavigation.map((item) => {
-                        const Icon = item.icon;
-                        const active = isActive(item.href);
-                        return <Link
-                            key={item.href}
-                            href={item.href}
-                            onBefore={rememberSidebarScroll}
-                            aria-current={active ? 'page' : undefined}
-                            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? 'bg-white/18 font-extrabold text-white shadow-sm ring-1 ring-white/15' : 'text-white/95 hover:bg-white/10'}`}
-                        ><Icon size={18}/>{item.label}</Link>;
-                    })}
+
+                <nav className="hf-sidebar-nav" aria-label="Main navigation">
+                    {groupedNavigation.map((group) => <div className="hf-sidebar-group" key={group.section}>
+                        <div className="hf-sidebar-section-label">{group.section}</div>
+                        <div className="hf-sidebar-section-items">
+                            {group.items.map((item) => {
+                                const Icon = item.icon;
+                                const active = isActive(item.href);
+                                return <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onBefore={rememberSidebarScroll}
+                                    aria-current={active ? 'page' : undefined}
+                                    className={`hf-sidebar-link ${active ? 'is-active' : ''}`}
+                                >
+                                    <span className="hf-sidebar-link-icon"><Icon size={18}/></span>
+                                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                                    {active && <span className="hf-sidebar-active-dot" aria-hidden="true"/>}
+                                </Link>;
+                            })}
+                        </div>
+                    </div>)}
                 </nav>
-                <div className="mt-8 border-t border-white/15 pt-4 pb-2 text-xs opacity-85">
-                    <div className="font-semibold">{user.name}</div>
-                    <div className="mt-1">{role?.name ?? 'User'}</div>
-                    <Link href="/logout" method="post" as="button" className="mt-4 flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2"><LogOut size={15}/> Logout</Link>
+
+                <div className="hf-sidebar-profile-wrap">
+                    <div className="hf-sidebar-profile">
+                        <div className="hf-avatar hf-avatar-large">{userInitial}</div>
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-extrabold text-[#2f2134]">{user.name}</div>
+                            <div className="mt-0.5 truncate text-[11px] font-semibold text-[#8b7b91]">{role?.name ?? 'User'}</div>
+                        </div>
+                        <Link href="/logout" method="post" as="button" className="hf-sidebar-logout" aria-label="Logout"><LogOut size={17}/></Link>
+                    </div>
                 </div>
             </aside>
 
             <main className="hf-main min-w-0 lg:h-screen lg:overflow-y-auto lg:overscroll-contain">
-                <header className="hf-desktop-header border-b border-[#eadff0] bg-white/90 px-4 py-4 backdrop-blur md:px-8 items-center justify-between gap-4">
-                    <div>
-                        <div className="text-xs font-semibold text-[#7b5f87]">SMVS Happy Family Portal</div>
-                        <h1 className="text-xl font-extrabold text-[#351342]">{title}</h1>
+                <header className="hf-desktop-header items-center justify-between gap-5">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className="hf-header-icon"><ActiveIcon size={20}/></span>
+                        <div className="min-w-0">
+                            <div className="hf-header-kicker">SMVS Happy Family</div>
+                            <h1 className="hf-header-title truncate">{title}</h1>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[#5d3b6a]"><ShieldCheck size={17}/> Role-scoped access</div>
+                    <div className="hf-header-account">
+                        <div className="min-w-0 text-right">
+                            <div className="max-w-56 truncate text-sm font-extrabold text-[#302235]">{user.name}</div>
+                            <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-semibold text-[#817087]"><ShieldCheck size={13}/>{role?.name ?? 'User'}</div>
+                        </div>
+                        <div className="hf-avatar">{userInitial}</div>
+                    </div>
                 </header>
 
                 <header className="hf-mobile-appbar lg:hidden">
                     <button type="button" className="hf-icon-btn" onClick={() => setMobileMenuOpen(true)} aria-label="Open navigation menu">
-                        <Menu size={22}/>
+                        <Menu size={21}/>
                     </button>
                     <div className="min-w-0 flex-1">
                         <div className="hf-mobile-kicker">SMVS Happy Family</div>
@@ -223,9 +271,9 @@ export default function AppLayout({ title, children }: { title: string; children
                     <button type="button" className="hf-avatar" onClick={() => setMobileMenuOpen(true)} aria-label="Open profile and menu">{userInitial}</button>
                 </header>
 
-                <div className="hf-page-content p-4 md:p-8">
-                    {flash.success && <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{flash.success}</div>}
-                    {flash.error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{flash.error}</div>}
+                <div className="hf-page-content p-4 md:p-7 xl:p-8">
+                    {flash.success && <div className="hf-alert hf-alert-success mb-4">{flash.success}</div>}
+                    {flash.error && <div className="hf-alert hf-alert-error mb-4">{flash.error}</div>}
                     {children}
                 </div>
             </main>
@@ -235,12 +283,12 @@ export default function AppLayout({ title, children }: { title: string; children
                     const Icon = item.icon;
                     const active = isActive(item.href);
                     return <Link key={item.href} href={item.href} className={`hf-mobile-tab ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
-                        <span className="hf-mobile-tab-icon"><Icon size={21}/></span>
-                        <span>{item.shortLabel ?? item.label}</span>
+                        <span className="hf-mobile-tab-icon"><Icon size={20}/></span>
+                        <span className="truncate">{item.shortLabel ?? item.label}</span>
                     </Link>;
                 })}
                 <button type="button" className={`hf-mobile-tab ${mobileMenuOpen || moreActive ? 'is-active' : ''}`} onClick={() => setMobileMenuOpen(true)} aria-label="More navigation options">
-                    <span className="hf-mobile-tab-icon"><MoreHorizontal size={22}/></span>
+                    <span className="hf-mobile-tab-icon"><MoreHorizontal size={21}/></span>
                     <span>More</span>
                 </button>
             </nav>
@@ -253,24 +301,27 @@ export default function AppLayout({ title, children }: { title: string; children
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="hf-avatar hf-avatar-large">{userInitial}</div>
                             <div className="min-w-0">
-                                <div className="truncate font-extrabold text-[#351342]">{user.name}</div>
-                                <div className="truncate text-xs font-semibold text-[#7b6783]">{role?.name ?? 'User'} · {user.email}</div>
+                                <div className="truncate font-extrabold text-[#302235]">{user.name}</div>
+                                <div className="truncate text-xs font-semibold text-[#85758b]">{role?.name ?? 'User'} · {user.email}</div>
                             </div>
                         </div>
-                        <button type="button" className="hf-icon-btn" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation menu"><X size={22}/></button>
+                        <button type="button" className="hf-icon-btn" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation menu"><X size={21}/></button>
                     </div>
                     <div className="hf-mobile-menu-scroll">
-                        <div className="hf-mobile-menu-grid">
-                            {visibleNavigation.map((item) => {
-                                const Icon = item.icon;
-                                const active = isActive(item.href);
-                                return <Link key={item.href} href={item.href} className={`hf-mobile-menu-item ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
-                                    <span className="hf-mobile-menu-icon"><Icon size={20}/></span>
-                                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                                    <ChevronRight size={17} className="opacity-45"/>
-                                </Link>;
-                            })}
-                        </div>
+                        {groupedNavigation.map((group) => <div className="hf-mobile-menu-section" key={group.section}>
+                            <div className="hf-mobile-menu-section-label">{group.section}</div>
+                            <div className="hf-mobile-menu-grid">
+                                {group.items.map((item) => {
+                                    const Icon = item.icon;
+                                    const active = isActive(item.href);
+                                    return <Link key={item.href} href={item.href} className={`hf-mobile-menu-item ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
+                                        <span className="hf-mobile-menu-icon"><Icon size={19}/></span>
+                                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                                        <ChevronRight size={16} className="opacity-40"/>
+                                    </Link>;
+                                })}
+                            </div>
+                        </div>)}
                         <Link href="/logout" method="post" as="button" className="hf-mobile-logout"><LogOut size={18}/> Logout</Link>
                     </div>
                 </section>

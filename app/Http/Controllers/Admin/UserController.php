@@ -7,6 +7,7 @@ use App\Models\Center;
 use App\Models\Karyakar;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Zone;
 use App\Services\AuditTrail;
 use App\Services\OrganizationalScope;
 use App\Services\UserAdministrationScope;
@@ -49,7 +50,13 @@ class UserController extends Controller
                 || ($canResetPasswords && $userScope->canResetPassword($actor, $user)))
             ->values();
         $userListTruncated = $candidateLimitReached || $authorizedUsers->count() > 250;
-        $users = $authorizedUsers->take(250)->map(fn (User $user) => [
+        $visibleUsers = $authorizedUsers->take(250);
+        $visibleZoneIds = $visibleUsers->flatMap(fn (User $user) => $user->roles->pluck('pivot.zone_id'))->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $visibleCenterIds = $visibleUsers->flatMap(fn (User $user) => $user->roles->pluck('pivot.center_id'))->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $zoneLabels = Zone::query()->whereIn('id', $visibleZoneIds)->get(['id', 'name', 'code'])->keyBy('id');
+        $centerLabels = Center::query()->whereIn('id', $visibleCenterIds)->get(['id', 'name', 'code'])->keyBy('id');
+
+        $users = $visibleUsers->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
@@ -58,14 +65,28 @@ class UserController extends Controller
                 'password_changed_at' => $user->password_changed_at,
                 'can_reset_password' => $canResetPasswords && $userScope->canResetPassword($actor, $user),
                 'can_manage' => $canManageUsers && $userScope->canManageTarget($actor, $user),
-                'roles' => $user->roles->map(fn (Role $role) => [
-                    'id' => $role->id,
-                    'name' => $role->name,
-                    'slug' => $role->slug,
-                    'zone_id' => $role->pivot->zone_id,
-                    'center_id' => $role->pivot->center_id,
-                    'is_primary' => (bool) $role->pivot->is_primary,
-                ])->values(),
+                'roles' => $user->roles->map(function (Role $role) use ($zoneLabels, $centerLabels): array {
+                    $zoneId = $role->pivot->zone_id ? (int) $role->pivot->zone_id : null;
+                    $centerId = $role->pivot->center_id ? (int) $role->pivot->center_id : null;
+                    $scopeLabel = 'Organization - SPK';
+                    if ($centerId !== null) {
+                        $center = $centerLabels->get($centerId);
+                        $scopeLabel = $center ? 'Center - '.$center->name.' ('.$center->code.')' : 'Center';
+                    } elseif ($zoneId !== null) {
+                        $zone = $zoneLabels->get($zoneId);
+                        $scopeLabel = $zone ? 'Zone - '.$zone->name.' ('.$zone->code.')' : 'Zone';
+                    }
+
+                    return [
+                        'id' => $role->id,
+                        'name' => $role->name,
+                        'slug' => $role->slug,
+                        'zone_id' => $zoneId,
+                        'center_id' => $centerId,
+                        'scope_label' => $scopeLabel,
+                        'is_primary' => (bool) $role->pivot->is_primary,
+                    ];
+                })->values(),
             ]);
 
         if (! $canManageUsers) {
@@ -239,7 +260,7 @@ class UserController extends Controller
     {
         $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
         return $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL\pM\s.\'-]+$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:12', 'max:255'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
@@ -254,7 +275,7 @@ class UserController extends Controller
     {
         $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
         return $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'regex:/^[\pL\pM\s.\'-]+$/u'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['prohibited'],
             'status' => ['required', Rule::in(['active', 'inactive'])],

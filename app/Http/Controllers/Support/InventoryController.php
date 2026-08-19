@@ -60,8 +60,13 @@ class InventoryController extends Controller
             'reference' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
-        $service->transact($request->user(), $item, $data['transaction_type'], (int) $data['quantity'], $data['reference'] ?? null, $data['note'] ?? null);
-        return back()->with('success', ucfirst($data['transaction_type']).' stock transaction recorded.');
+        $actor = $request->user();
+        $service->transact($actor, $item, $data['transaction_type'], (int) $data['quantity'], $data['reference'] ?? null, $data['note'] ?? null);
+        $karyalayInward = $data['transaction_type'] === 'inward' && ($actor->hasRole('super_admin') || $actor->hasRole('bn_karyalay_admin'));
+        $message = $karyalayInward
+            ? 'Inward stock recorded and a Center announcement was published for the receiving Center.'
+            : ucfirst($data['transaction_type']).' stock transaction recorded.';
+        return back()->with('success', $message);
     }
 
     private function centers($user, SupportScopeService $scope): array

@@ -2,7 +2,7 @@
 
 Production-oriented cumulative source package implementing the uploaded **SMVS Happy Family Project SRS Version 3.0** and **Full Portal Wireframe Version 2.0**.
 
-Current release: **1.0.12 - Redis Queue Stability + DNS/Host Diagnostics + Login/Session Hardening + Mobile App UI (Phases 0-7 cumulative)**
+Current release: **1.0.15 - Testing-Report Bug Fixes + v1.0.14 UI Refinement + v1.0.12 Runtime Hardening (Phases 0-7 cumulative)**
 
 ## What is included
 
@@ -39,6 +39,12 @@ Current release: **1.0.12 - Redis Queue Stability + DNS/Host Diagnostics + Login
 - target creation and progress calculation
 
 ### Mobile application experience
+
+- v1.0.13 visual-system refresh with a wider polished desktop shell, refined sidebar/header hierarchy, modern cards/buttons/forms and consistent responsive spacing
+- v1.0.14 shared-shell refinement with grouped desktop navigation, floating mobile bottom navigation, upgraded login/dashboard composition, stronger table/card/form consistency and 320px-safe responsive treatment
+- v1.0.15 bug-fix pass covering Center Admin create visibility, readable user scopes, independent role baselines, duplicate Group prevention, Family/member/mobile rules, female-head synchronization, multi-Family assignment, Area/Society UX, Inventory Center notice and working Analysis filters with Group member/status filtering
+- upgraded dashboard hero, KPI surfaces, leaderboards and compact two-column phone metrics while preserving every existing data source/action
+- refreshed desktop split-panel login and full-screen mobile login presentation
 
 - sticky mobile app bar with compact page title and user/menu access
 - role-aware bottom navigation with active-state highlighting

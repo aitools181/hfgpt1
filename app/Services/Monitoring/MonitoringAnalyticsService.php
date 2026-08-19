@@ -54,6 +54,7 @@ class MonitoringAnalyticsService
             'karyakar_id' => $user->hasRole('karyakar') ? ($ownKaryakarId ?: -1) : (isset($input['karyakar_id']) && $input['karyakar_id'] !== '' ? (int) $input['karyakar_id'] : null),
             'area_id' => isset($input['area_id']) && $input['area_id'] !== '' ? (int) $input['area_id'] : null,
             'status' => $input['status'] ?? null,
+            'group_status' => in_array(($input['group_status'] ?? null), ['active', 'non_active', 'draft', 'closed'], true) ? $input['group_status'] : null,
             'gender' => $gender,
             'category' => $input['category'] ?? null,
             'date_from' => $dateFrom?->toDateString(),
@@ -89,6 +90,7 @@ class MonitoringAnalyticsService
 
         $karyakarQuery = $this->karyakarQuery($filters, $centerIds);
         $groupQuery = SankalpGroup::query()->whereIn('center_id', $centerIds);
+        $this->applyGroupStatusFilter($groupQuery, $filters['group_status']);
         if ($filters['group_id']) {
             $groupQuery->whereKey($filters['group_id']);
         }
@@ -131,6 +133,34 @@ class MonitoringAnalyticsService
             ->sortByDesc('completion_percentage')->values()
             ->map(fn (array $row, int $index) => ['rank' => $index + 1] + $row)->all();
 
+        $groupRows = (clone $groupQuery)
+            ->with([
+                'center:id,name,code',
+                'area:id,name',
+                'society:id,name',
+                'karyakars' => fn ($q) => $q->where('group_karyakars.status', 'active')->orderBy('group_karyakars.position')->select('karyakars.id', 'karyakars.full_name', 'karyakars.karyakar_reference'),
+            ])
+            ->withCount(['familyAssignments as active_families_count' => fn ($q) => $q->where('status', 'active')])
+            ->orderBy('group_code')
+            ->limit(250)
+            ->get()
+            ->map(fn (SankalpGroup $group) => [
+                'id' => $group->id,
+                'group_code' => $group->group_code,
+                'group_type' => $group->group_type,
+                'status' => $group->status,
+                'center' => $group->center?->name,
+                'center_code' => $group->center?->code,
+                'area' => $group->area?->name,
+                'society' => $group->society?->name,
+                'active_families_count' => $group->active_families_count,
+                'members' => $group->karyakars->map(fn (Karyakar $k) => [
+                    'id' => $k->id,
+                    'name' => $k->full_name,
+                    'reference' => $k->karyakar_reference,
+                ])->values(),
+            ])->values()->all();
+
         return [
             'filters' => $filters,
             'summary' => [
@@ -153,6 +183,7 @@ class MonitoringAnalyticsService
                 'completionPercentage' => $completionPercentage,
                 'homeVisits' => (clone $visitQuery)->count(),
             ],
+            'groupRows' => $groupRows,
             'centerPerformance' => $centerPerformance,
             'zonePerformance' => $zonePerformance,
             'genderDistribution' => $this->genderDistribution($filters, $centerIds),
@@ -178,7 +209,12 @@ class MonitoringAnalyticsService
             $targetQuantity = (int) $this->targetQuery($centerFilter, $ids)->sum('target_quantity');
             $targetCompleted = (int) $this->targetQuery($centerFilter, $ids)->sum('completed_quantity');
             $balCompleted = $this->includeBalInMain($user) ? (int) $this->balCompletionQuery($centerFilter, $ids)->sum('families_completed') : 0;
-            $groupQuery = SankalpGroup::query()->where('center_id', $center->id)->where('status', 'active');
+            $groupQuery = SankalpGroup::query()->where('center_id', $center->id);
+            if ($filters['group_status']) {
+                $this->applyGroupStatusFilter($groupQuery, $filters['group_status']);
+            } else {
+                $groupQuery->where('status', 'active');
+            }
             if ($filters['area_id']) $groupQuery->where('sampark_area_id', $filters['area_id']);
             if ($filters['group_id']) $groupQuery->whereKey($filters['group_id']);
             if ($filters['karyakar_id'] || $filters['gender'] || $filters['category']) {
@@ -273,10 +309,12 @@ class MonitoringAnalyticsService
     {
         $filters = $this->filters($user, $input);
         $centerIds = $filters['allowed_center_ids'];
+        $optionCenterIds = $filters['center_id'] ? collect([$filters['center_id']]) : $centerIds;
 
-        $groups = SankalpGroup::query()->whereIn('center_id', $centerIds)->orderBy('group_code');
-        $karyakars = Karyakar::query()->whereIn('center_id', $centerIds)->where('status', 'approved')->orderBy('full_name');
-        $areas = \App\Models\SamparkArea::query()->whereIn('center_id', $centerIds)->orderBy('name');
+        $groups = SankalpGroup::query()->whereIn('center_id', $optionCenterIds)->orderBy('group_code');
+        $this->applyGroupStatusFilter($groups, $filters['group_status']);
+        $karyakars = Karyakar::query()->whereIn('center_id', $optionCenterIds)->where('status', 'approved')->orderBy('full_name');
+        $areas = \App\Models\SamparkArea::query()->whereIn('center_id', $optionCenterIds)->orderBy('name');
         if ($filters['female_scope_locked']) {
             $karyakars->where('gender', 'female');
         }
@@ -294,11 +332,30 @@ class MonitoringAnalyticsService
             // base query builder so PHP does not hydrate thousands of Eloquent
             // model objects just to serialize id/name labels.
             'centers' => Center::query()->whereIn('id', $centerIds)->orderBy('name')->toBase()->get(['id', 'name', 'code']),
-            'groups' => $groups->toBase()->get(['id', 'center_id', 'group_code']),
+            'groups' => $groups->with(['karyakars' => fn ($q) => $q->where('group_karyakars.status', 'active')->orderBy('group_karyakars.position')->select('karyakars.id', 'karyakars.full_name')])
+                ->get(['id', 'center_id', 'group_code', 'status'])
+                ->map(fn (SankalpGroup $group) => [
+                    'id' => $group->id,
+                    'center_id' => $group->center_id,
+                    'group_code' => $group->group_code,
+                    'status' => $group->status,
+                    'member_names' => $group->karyakars->pluck('full_name')->values()->all(),
+                ])->values(),
             'karyakars' => $karyakars->toBase()->get(['id', 'center_id', 'full_name', 'gender', 'category']),
             'areas' => $areas->toBase()->get(['id', 'center_id', 'name']),
-            'categories' => Karyakar::query()->whereIn('center_id', $centerIds)->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->values(),
+            'categories' => Karyakar::query()->whereIn('center_id', $optionCenterIds)->whereNotNull('category')->distinct()->orderBy('category')->pluck('category')->values(),
         ];
+    }
+
+    private function applyGroupStatusFilter(Builder $query, ?string $status): Builder
+    {
+        if ($status === 'non_active') {
+            return $query->where('status', '!=', 'active');
+        }
+        if (in_array($status, ['active', 'draft', 'closed'], true)) {
+            return $query->where('status', $status);
+        }
+        return $query;
     }
 
     private function genderDistribution(array $filters, array|Collection $centerIds): array
