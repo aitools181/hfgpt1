@@ -169,8 +169,17 @@ class GroupController extends Controller
     public function assignFamily(Request $request, SankalpGroup $group, GroupAssignmentService $service): RedirectResponse
     {
         abort_unless($request->user()->canAccessCenterId($group->center_id), 403);
+        $familyIds = $request->input('family_ids', []);
+        if (! is_array($familyIds)) {
+            $familyIds = [];
+        }
+        if ($familyIds === [] && $request->filled('family_id')) {
+            $familyIds = [$request->input('family_id')];
+        }
+        $request->merge(['family_ids' => array_values(array_unique($familyIds))]);
         $data = $request->validate([
-            'family_id' => ['required', 'integer', 'exists:families,id'],
+            'family_ids' => ['required', 'array', 'min:1', 'max:10'],
+            'family_ids.*' => ['required', 'integer', 'distinct', 'exists:families,id'],
             'assignment_type' => ['required', Rule::in(['fixed', 'remaining'])],
             'change_note' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -179,8 +188,8 @@ class GroupController extends Controller
         } else {
             abort_unless($request->user()->hasPermission('assign_transfer_families'), 403, 'Assigning Remaining Families requires the Family assignment/transfer permission.');
         }
-        $service->assignFamily($group, (int) $data['family_id'], $data['assignment_type'], $request->user(), 'admin', $data['change_note'] ?? null);
-        return back()->with('success', 'Sankalp Family assigned to the Group.');
+        $assigned = $service->assignFamilies($group, $data['family_ids'], $data['assignment_type'], $request->user(), 'admin', $data['change_note'] ?? null);
+        return back()->with('success', $assigned->count().' Sankalp '.($assigned->count() === 1 ? 'Family' : 'Families').' assigned to the Group.');
     }
 
     public function selectRemainingFamily(Request $request, SankalpGroup $group, GroupAssignmentService $service): RedirectResponse
@@ -199,9 +208,10 @@ class GroupController extends Controller
     {
         $linked = Karyakar::query()->where('user_id', $request->user()->id)->where('center_id', $group->center_id)->where('status', 'approved')->first();
         abort_unless($linked && $group->karyakarAssignments()->where('karyakar_id', $linked->id)->where('status', 'active')->exists(), 403, 'Only a Karyakar assigned to this Group may report a new Remaining Family.');
+        $request->merge(['head_mobile' => $this->normalizeMobile($request->input('head_mobile'))]);
         $data = $request->validate([
             'head_name' => ['required', 'string', 'max:255'],
-            'head_mobile' => ['nullable', 'string', 'max:30'],
+            'head_mobile' => ['nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'address' => ['nullable', 'string', 'max:2000'],
             'city_village' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:1000'],
@@ -259,4 +269,16 @@ class GroupController extends Controller
         }
         return false;
     }
+    private function normalizeMobile(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $mobile = preg_replace('/[^0-9]/', '', trim((string) $value)) ?? '';
+        if (strlen($mobile) === 12 && str_starts_with($mobile, '91')) {
+            $mobile = substr($mobile, 2);
+        }
+        return $mobile === '' ? null : $mobile;
+    }
+
 }

@@ -13,7 +13,7 @@ type UserRow = {
     password_changed_at: string | null;
     can_reset_password: boolean;
     can_manage: boolean;
-    roles: Array<{ id: number; name: string; slug: string; zone_id: number | null; center_id: number | null; is_primary: boolean }>;
+    roles: Array<{ id: number; name: string; slug: string; zone_id: number | null; center_id: number | null; scope_label: string; is_primary: boolean }>;
 };
 
 type Props = {
@@ -106,7 +106,7 @@ export default function Users({ users, roles, zones, centers, karyakars, canMana
                             <td><div className="font-semibold">{u.name}</div>{u.id === currentUserId && <div className="text-xs text-[#7b5f87]">Current account</div>}</td>
                             <td>{u.email}</td>
                             <td>{r?.name ?? '-'}</td>
-                            <td>{r?.center_id ? `Center #${r.center_id}` : r?.zone_id ? `Zone #${r.zone_id}` : 'Organization'}</td>
+                            <td>{r?.scope_label ?? 'Organization - SPK'}</td>
                             <td><span className="hf-badge">{u.status}</span></td>
                             <td>{u.password_changed_at ? new Date(u.password_changed_at).toLocaleString() : 'Not reset yet'}</td>
                             {canResetPasswords && <td className="min-w-[290px]">

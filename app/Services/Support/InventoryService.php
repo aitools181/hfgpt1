@@ -2,6 +2,7 @@
 
 namespace App\Services\Support;
 
+use App\Models\Announcement;
 use App\Models\InventoryItem;
 use App\Models\InventoryTransaction;
 use App\Models\User;
@@ -54,6 +55,22 @@ class InventoryService
                 'recorded_at' => now(),
             ]);
             $this->audit->record('inventory', $type, InventoryItem::class, (string) $locked->id, ['stock' => $before], ['stock' => $after, 'quantity' => $quantity], $note, centerId: $locked->center_id);
+
+            // Karyalay-origin inward stock is automatically published to the destination
+            // Center so its admins can see what was sent without relying on a separate message.
+            if ($type === 'inward' && ($user->hasRole('super_admin') || $user->hasRole('bn_karyalay_admin'))) {
+                $referenceText = $reference ? " Reference: {$reference}." : '';
+                $noteText = $note ? " Note: {$note}" : '';
+                Announcement::query()->create([
+                    'center_id' => $locked->center_id,
+                    'title' => 'Inventory received from Karyalay',
+                    'body' => "{$quantity} {$locked->unit} of {$locked->name} ({$locked->sku}) has been sent/recorded for your Center.{$referenceText}{$noteText}",
+                    'audience' => 'main',
+                    'status' => 'published',
+                    'published_at' => now(),
+                    'created_by' => $user->id,
+                ]);
+            }
             return $transaction;
         }, 3);
     }

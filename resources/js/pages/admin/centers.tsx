@@ -1,2 +1,19 @@
-import { Head, useForm } from '@inertiajs/react'; import AppLayout from '../../layouts/app-layout';
-export default function Centers({centers,zones}:any){const f=useForm({zone_id:'',name:'',code:'',city:'',address:'',contact_phone:'',contact_email:'',status:'active'});return <AppLayout title="Centers"><Head title="Centers"/><div className="grid gap-5 xl:grid-cols-[380px_1fr]"><form className="hf-card p-5 space-y-3" onSubmit={e=>{e.preventDefault();f.post('/admin/centers',{onSuccess:()=>f.reset()})}}><h2 className="font-extrabold">Create Center</h2><select className="hf-input" value={f.data.zone_id} onChange={e=>f.setData('zone_id',e.target.value)}><option value="">Select zone</option>{zones.map((z:any)=><option key={z.id} value={z.id}>{z.code} - {z.name}</option>)}</select><input className="hf-input" placeholder="Center name" value={f.data.name} onChange={e=>f.setData('name',e.target.value)}/><input className="hf-input" placeholder="Center code (e.g. GND)" value={f.data.code} onChange={e=>f.setData('code',e.target.value)}/><input className="hf-input" placeholder="City / Location" value={f.data.city} onChange={e=>f.setData('city',e.target.value)}/><input className="hf-input" placeholder="Phone" value={f.data.contact_phone} onChange={e=>f.setData('contact_phone',e.target.value)}/><button className="hf-btn">Save Center</button></form><div className="hf-card p-5 overflow-x-auto"><div className="hf-table-scroll"><table className="hf-table hf-mobile-table"><thead><tr><th>Code</th><th>Center</th><th>Zone</th><th>City</th><th>Status</th></tr></thead><tbody>{centers.map((c:any)=><tr key={c.id}><td>{c.code}</td><td>{c.name}</td><td>{c.zone?.name ?? '-'}</td><td>{c.city ?? '-'}</td><td><span className="hf-badge">{c.status}</span></td></tr>)}</tbody></table></div></div></div></AppLayout>}
+import { Head, useForm } from '@inertiajs/react';
+import AppLayout from '../../layouts/app-layout';
+
+export default function Centers({centers,zones,canManageCenters}:any){
+ const f=useForm({zone_id:'',name:'',code:'',city:'',address:'',contact_phone:'',contact_email:'',status:'active'});
+ return <AppLayout title="Centers"><Head title="Centers"/><div className={canManageCenters?'grid gap-5 xl:grid-cols-[380px_1fr]':''}>
+  {canManageCenters&&<form className="hf-card p-5 space-y-3" onSubmit={e=>{e.preventDefault();f.post('/admin/centers',{onSuccess:()=>f.reset()})}}>
+   <div><h2 className="font-extrabold">Create Center</h2><p className="mt-1 text-xs text-[#76647e]">Only roles with the Manage Centers permission can create or edit Center master data.</p></div>
+   <select className="hf-input" value={f.data.zone_id} onChange={e=>f.setData('zone_id',e.target.value)}><option value="">Select zone</option>{zones.map((z:any)=><option key={z.id} value={z.id}>{z.code} - {z.name}</option>)}</select>
+   <input className="hf-input" placeholder="Center name" value={f.data.name} onChange={e=>f.setData('name',e.target.value)}/>
+   <input className="hf-input" placeholder="Center code (e.g. GND)" value={f.data.code} onChange={e=>f.setData('code',e.target.value)}/>
+   <input className="hf-input" placeholder="City / Location" value={f.data.city} onChange={e=>f.setData('city',e.target.value)}/>
+   <input className="hf-input" placeholder="Phone" value={f.data.contact_phone} onChange={e=>f.setData('contact_phone',e.target.value)}/>
+   {Object.values(f.errors).length>0&&<div className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{String(Object.values(f.errors)[0])}</div>}
+   <button className="hf-btn" disabled={f.processing}>Save Center</button>
+  </form>}
+  <div className="hf-card p-5 overflow-x-auto"><div className="mb-4"><h2 className="font-extrabold">Permitted Centers</h2>{!canManageCenters&&<p className="mt-1 text-xs text-[#76647e]">View only. Center creation is not available for this role.</p>}</div><div className="hf-table-scroll"><table className="hf-table hf-mobile-table"><thead><tr><th>Code</th><th>Center</th><th>Zone</th><th>City</th><th>Status</th></tr></thead><tbody>{centers.map((c:any)=><tr key={c.id}><td>{c.code}</td><td>{c.name}</td><td>{c.zone?.name ?? '-'}</td><td>{c.city ?? '-'}</td><td><span className="hf-badge">{c.status}</span></td></tr>)}</tbody></table></div></div>
+ </div></AppLayout>;
+}

@@ -29,6 +29,19 @@ class GroupAssignmentService
             $karyakars = Karyakar::query()->whereIn('id', array_values(array_unique($karyakarIds)))->lockForUpdate()->get();
             $this->rules->validateKaryakars($karyakars, $groupType, $center->id);
 
+            $pairIds = $karyakars->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+            $duplicateGroup = SankalpGroup::query()
+                ->where('center_id', $center->id)
+                ->whereHas('karyakarAssignments', fn ($q) => $q->where('status', 'active')->where('karyakar_id', $pairIds[0]))
+                ->whereHas('karyakarAssignments', fn ($q) => $q->where('status', 'active')->where('karyakar_id', $pairIds[1]))
+                ->whereDoesntHave('karyakarAssignments', fn ($q) => $q->where('status', 'active')->whereNotIn('karyakar_id', $pairIds))
+                ->first();
+            if ($duplicateGroup) {
+                throw ValidationException::withMessages([
+                    'karyakar_ids' => "These same two Sankalp Karyakars already form Group {$duplicateGroup->group_code}. Select a different Karyakar combination.",
+                ]);
+            }
+
             $group = SankalpGroup::query()->create([
                 'center_id' => $center->id,
                 'group_code' => $this->codes->next($center),
@@ -54,6 +67,18 @@ class GroupAssignmentService
             ], centerId: $center->id);
 
             return $group->fresh();
+        }, 3);
+    }
+
+    public function assignFamilies(SankalpGroup $group, array $familyIds, string $type, User $actor, string $source = 'admin', ?string $note = null): \Illuminate\Support\Collection
+    {
+        $familyIds = array_values(array_unique(array_map('intval', $familyIds)));
+        return DB::transaction(function () use ($group, $familyIds, $type, $actor, $source, $note) {
+            $assigned = collect();
+            foreach ($familyIds as $familyId) {
+                $assigned->push($this->assignFamily($group, $familyId, $type, $actor, $source, $note));
+            }
+            return $assigned;
         }, 3);
     }
 
@@ -147,6 +172,15 @@ class GroupAssignmentService
             }
             if ($karyakar->status !== 'approved') {
                 throw ValidationException::withMessages(['karyakar' => 'Only an Approved Sankalp Karyakar may report a Remaining Family.']);
+            }
+
+            $headMobile = $data['head_mobile'] ?? null;
+            if ($headMobile && Family::query()->whereNotNull('head_mobile')
+                ->whereRaw("RIGHT(regexp_replace(head_mobile, '[^0-9]', '', 'g'), 10) = ?", [$headMobile])
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'head_mobile' => 'A Sankalp Family is already registered with this Head mobile number. Use the existing Family instead of reporting a duplicate.',
+                ]);
             }
 
             $family = Family::query()->create([

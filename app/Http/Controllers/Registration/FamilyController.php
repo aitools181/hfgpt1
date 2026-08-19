@@ -53,11 +53,12 @@ class FamilyController extends Controller
 
     public function store(Request $request, OrganizationalScope $scope): RedirectResponse
     {
+        $this->normalizeManualFamilyRequest($request);
         $allowedCenters = $scope->centers($request->user())->pluck('id')->all();
         $data = $request->validate([
             'center_id' => ['required', Rule::in($allowedCenters)],
             'head_name' => ['required', 'string', 'max:255'],
-            'head_mobile' => ['nullable', 'string', 'max:30'],
+            'head_mobile' => ['nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'address' => ['nullable', 'string', 'max:2000'],
             'city_village' => ['nullable', 'string', 'max:255'],
             'sampark_area_id' => ['nullable', 'integer', 'exists:sampark_areas,id'],
@@ -65,15 +66,17 @@ class FamilyController extends Controller
             'members' => ['array', 'max:30'],
             'members.*.name' => ['required', 'string', 'max:255'],
             'members.*.gender' => ['required', Rule::in(['male', 'female'])],
-            'members.*.age' => ['nullable', 'integer', 'min:0', 'max:120'],
-            'members.*.mobile' => ['nullable', 'string', 'max:30'],
-            'members.*.relationship' => ['nullable', 'string', 'max:100'],
+            'members.*.age' => ['required', 'integer', 'min:0', 'max:120'],
+            'members.*.mobile' => ['nullable', 'regex:/^[6-9][0-9]{9}$/'],
+            'members.*.relationship' => ['required', 'string', 'max:100'],
             'members.*.is_head' => ['boolean'],
         ]);
 
         if (collect($data['members'] ?? [])->where('is_head', true)->count() > 1) {
             throw ValidationException::withMessages(['members' => 'Only one Family Member can be marked as Head.']);
         }
+        $data = $this->resolveHeadFromMembers($data);
+        $this->assertUniqueHeadMobile($data['head_mobile'] ?? null);
 
         if (! empty($data['sampark_area_id'])) {
             $area = SamparkArea::query()->findOrFail($data['sampark_area_id']);
@@ -118,10 +121,11 @@ class FamilyController extends Controller
 
     public function update(Request $request, Family $family, AuditTrail $audit): RedirectResponse
     {
+        $this->normalizeManualFamilyRequest($request);
         abort_unless($request->user()->canAccessCenterId($family->center_id), 403);
         $data = $request->validate([
             'head_name' => ['required', 'string', 'max:255'],
-            'head_mobile' => ['nullable', 'string', 'max:30'],
+            'head_mobile' => ['nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'address' => ['nullable', 'string', 'max:2000'],
             'city_village' => ['nullable', 'string', 'max:255'],
             'sampark_area_id' => ['nullable', 'integer', 'exists:sampark_areas,id'],
@@ -133,7 +137,7 @@ class FamilyController extends Controller
             'members.*.name' => ['required', 'string', 'max:255'],
             'members.*.gender' => ['required', Rule::in(['male', 'female'])],
             'members.*.age' => ['nullable', 'integer', 'min:0', 'max:120'],
-            'members.*.mobile' => ['nullable', 'string', 'max:30'],
+            'members.*.mobile' => ['nullable', 'regex:/^[6-9][0-9]{9}$/'],
             'members.*.relationship' => ['nullable', 'string', 'max:100'],
             'members.*.is_head' => ['boolean'],
             'members.*.status' => ['required', Rule::in(['active', 'inactive'])],
@@ -157,6 +161,8 @@ class FamilyController extends Controller
         if (collect($members)->where('is_head', true)->count() > 1) {
             throw ValidationException::withMessages(['members' => 'Only one Family Member can be marked as Head.']);
         }
+        $data = $this->resolveHeadFromMembers($data, $members);
+        $this->assertUniqueHeadMobile($data['head_mobile'] ?? null, $family->id);
         $memberIds = collect($members)->pluck('id')->filter()->map(fn ($id) => (int) $id);
         if ($memberIds->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages(['members' => 'The same Family Member cannot be submitted twice.']);
@@ -202,6 +208,67 @@ class FamilyController extends Controller
         }, 3);
 
         return back()->with('success', 'Sankalp Family details updated with an audited change reason.');
+    }
+
+    private function normalizeManualFamilyRequest(Request $request): void
+    {
+        $members = collect($request->input('members', []))->map(function (array $member): array {
+            if (array_key_exists('mobile', $member)) {
+                $member['mobile'] = $this->normalizeMobile($member['mobile']);
+            }
+            return $member;
+        })->all();
+
+        $request->merge([
+            'head_mobile' => $this->normalizeMobile($request->input('head_mobile')),
+            'members' => $members,
+        ]);
+    }
+
+    private function normalizeMobile(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $mobile = trim((string) $value);
+        if ($mobile === '') {
+            return null;
+        }
+        $mobile = preg_replace('/[\s()+-]+/', '', $mobile) ?? $mobile;
+        if (strlen($mobile) === 12 && str_starts_with($mobile, '91')) {
+            $mobile = substr($mobile, 2);
+        }
+        return $mobile;
+    }
+
+    private function resolveHeadFromMembers(array $data, ?array $members = null): array
+    {
+        $memberRows = collect($members ?? ($data['members'] ?? []));
+        $head = $memberRows->first(fn (array $member): bool => (bool) ($member['is_head'] ?? false));
+        if ($head) {
+            $data['head_name'] = trim((string) $head['name']);
+            if (! empty($head['mobile'])) {
+                $data['head_mobile'] = $head['mobile'];
+            }
+        }
+        return $data;
+    }
+
+    private function assertUniqueHeadMobile(?string $mobile, ?int $ignoreFamilyId = null): void
+    {
+        if ($mobile === null || $mobile === '') {
+            return;
+        }
+        $query = Family::query()->whereNotNull('head_mobile')
+            ->whereRaw("RIGHT(regexp_replace(head_mobile, '[^0-9]', '', 'g'), 10) = ?", [$mobile]);
+        if ($ignoreFamilyId !== null) {
+            $query->where('id', '!=', $ignoreFamilyId);
+        }
+        if ($query->exists()) {
+            throw ValidationException::withMessages([
+                'head_mobile' => 'A Sankalp Family is already registered with this Head mobile number. Open the existing Family instead of registering it again.',
+            ]);
+        }
     }
 
     private function validateLocation(int $centerId, ?int $areaId, ?int $societyId): void

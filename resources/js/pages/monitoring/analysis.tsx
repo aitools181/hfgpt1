@@ -2,13 +2,14 @@ import { Head, Link } from '@inertiajs/react';
 import { BarChart3, Download, Filter, Trophy } from 'lucide-react';
 import AppLayout from '../../layouts/app-layout';
 
-type Option = { id:number; name?:string; code?:string; group_code?:string; full_name?:string; gender?:string; category?:string; center_id?:number };
-type Filters = { center_id:number|null; group_id:number|null; karyakar_id:number|null; area_id:number|null; gender:string|null; category:string|null; status:string|null; date_from:string|null; date_to:string|null; female_scope_locked:boolean };
+type Option = { id:number; name?:string; code?:string; group_code?:string; full_name?:string; gender?:string; category?:string; center_id?:number; status?:string; member_names?:string[] };
+type Filters = { center_id:number|null; group_id:number|null; karyakar_id:number|null; area_id:number|null; gender:string|null; category:string|null; status:string|null; group_status:string|null; date_from:string|null; date_to:string|null; female_scope_locked:boolean };
 type Row = Record<string, any>;
 type Props = {
     analysis: {
         filters: Filters;
         summary: Record<string, number>;
+        groupRows: Row[];
         centerPerformance: Row[];
         zonePerformance: Row[];
         genderDistribution: {label:string; key:string; value:number}[];
@@ -40,6 +41,8 @@ export default function Analysis({ analysis, options }: Props) {
             <Metric label="Bal Completed" value={s.balCompletedFamilies}/><Metric label="Overall Completed" value={s.overallCompletedFamilies}/><Metric label="Pending Main Families" value={s.pendingFamilies}/><Metric label="Main Completion" value={`${s.completionPercentage}%`}/>
         </div>
 
+        <section className="hf-card mt-5 p-5 overflow-x-auto"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><SectionTitle icon={<BarChart3 size={18}/>} title="Filtered Groups & Members"/><span className="hf-badge">{analysis.groupRows.length} groups</span></div><p className="mb-3 text-xs text-[#76647e]">Use Group Status, Group, Karyakar and other filters above. Active / Draft / Closed groups are listed with their two current Karyakars.</p><div className="hf-table-scroll"><table className="hf-table hf-mobile-table min-w-[900px]"><thead><tr><th>Group</th><th>Status</th><th>Center</th><th>Group Members</th><th>Families</th><th>Area / Society</th></tr></thead><tbody>{analysis.groupRows.length===0?<tr><td colSpan={6}>No groups for the selected filters.</td></tr>:analysis.groupRows.map((g:any)=><tr key={g.id}><td><b>{g.group_code}</b><div className="text-xs text-[#76647e]">{g.group_type}</div></td><td><span className="hf-badge capitalize">{g.status}</span></td><td>{g.center_code} - {g.center}</td><td>{(g.members??[]).map((m:any)=><div key={m.id}><b>{m.name}</b><span className="ml-1 text-xs text-[#76647e]">{m.reference}</span></div>)}</td><td>{g.active_families_count}/10</td><td>{g.area??'Unassigned'}{g.society?<div className="text-xs">{g.society}</div>:null}</td></tr>)}</tbody></table></div></section>
+
         <div className="mt-5 grid gap-5 xl:grid-cols-2">
             <section className="hf-card p-5"><SectionTitle icon={<BarChart3 size={18}/>} title="Zone Main + Bal Completion"/><div className="mt-4 space-y-4">{analysis.zonePerformance.length === 0 ? <Empty/> : analysis.zonePerformance.map((row) => <ProgressRow key={String(row.zone_id)} label={row.zone} sub={`${row.completed} main + ${row.bal_completed ?? 0} Bal completed / ${row.assigned} main assigned`} percent={row.completion_percentage}/>)}</div></section>
             <section className="hf-card p-5"><SectionTitle icon={<BarChart3 size={18}/>} title="Center Performance"/><div className="mt-4 space-y-4">{analysis.centerPerformance.length === 0 ? <Empty/> : analysis.centerPerformance.map((row) => <ProgressRow key={String(row.center_id)} label={`${row.center} (${row.center_code})`} sub={`${row.completed} main + ${row.bal_completed ?? 0} Bal completed · ${row.pending} main pending`} percent={row.completion_percentage}/>)}</div></section>
@@ -60,9 +63,10 @@ export default function Analysis({ analysis, options }: Props) {
 }
 
 function FilterForm({filters, options}:{filters:Filters; options:Props['options']}) {
-    return <form method="get" action="/monitoring/analysis" className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+    return <form method="get" action="/monitoring/analysis" className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Select name="center_id" label="Center" value={filters.center_id ?? ''}><option value="">All permitted centers</option>{options.centers.map(o=><option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}</Select>
-        <Select name="group_id" label="Group" value={filters.group_id ?? ''}><option value="">All groups</option>{options.groups.map(o=><option key={o.id} value={o.id}>{o.group_code}</option>)}</Select>
+        <Select name="group_id" label="Group" value={filters.group_id ?? ''}><option value="">All groups</option>{options.groups.map(o=><option key={o.id} value={o.id}>{o.group_code}{o.member_names?.length?` — ${o.member_names.join(' + ')}`:''}</option>)}</Select>
+        <Select name="group_status" label="Group Status" value={filters.group_status ?? ''}><option value="">All group status</option><option value="active">Active</option><option value="non_active">Non-active (Draft / Closed)</option></Select>
         <Select name="karyakar_id" label="Karyakar" value={filters.karyakar_id ?? ''}><option value="">All Karyakars</option>{options.karyakars.map(o=><option key={o.id} value={o.id}>{o.full_name}</option>)}</Select>
         <Select name="area_id" label="Area" value={filters.area_id ?? ''}><option value="">All areas</option>{options.areas.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select>
         <Select name="gender" label="Gender" value={filters.gender ?? ''} disabled={filters.female_scope_locked}><option value="">All</option><option value="male">Male</option><option value="female">Female</option></Select>
@@ -73,7 +77,7 @@ function FilterForm({filters, options}:{filters:Filters; options:Props['options'
         <div className="flex items-end gap-2"><button className="hf-btn inline-flex items-center gap-2" type="submit"><Filter size={16}/> Apply</button><Link className="hf-btn hf-btn-secondary" href="/monitoring/analysis">Reset</Link></div>
     </form>;
 }
-function Select({label,children,...props}:any){return <div><label className="hf-label">{label}</label><select className="hf-input" {...props}>{children}</select></div>}
+function Select({label,children,value,...props}:any){return <div><label className="hf-label">{label}</label><select key={`${props.name??label}-${String(value)}`} className="hf-input" defaultValue={value} {...props}>{children}</select></div>}
 function Metric({label,value}:{label:string;value:string|number}){return <div className="hf-card p-5"><div className="text-sm font-semibold text-[#7a657f]">{label}</div><div className="mt-2 text-3xl font-black text-[#5f187c]">{value}</div></div>}
 function SectionTitle({icon,title}:{icon:any;title:string}){return <div className="flex items-center gap-2 text-[#4f1964]">{icon}<h2 className="font-extrabold">{title}</h2></div>}
 function ProgressRow({label,sub,percent}:{label:string;sub:string;percent:number}){return <div><div className="flex items-end justify-between gap-3"><div><div className="font-bold">{label}</div><div className="text-xs text-[#7b6b80]">{sub}</div></div><div className="font-black text-[#611a7a]">{percent}%</div></div><div className="mt-2 h-2.5 rounded-full bg-[#eee5f1]"><div className="h-2.5 rounded-full bg-[#6a1b9a]" style={{width:`${Math.min(100,Math.max(0,percent))}%`}}/></div></div>}

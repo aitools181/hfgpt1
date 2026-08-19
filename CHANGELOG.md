@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.0.15 - Testing-report bug fixes and workflow validation hardening - 2026-08-19
+
+- Hid Center creation controls unless the signed-in user actually has `manage_centers`; Center Admin remains view-only by baseline.
+- Replaced numeric User Management scope labels with readable `Organization - SPK`, `Zone - Name (CODE)` and `Center - Name (CODE)` labels; tightened user-name character validation.
+- Made role baselines explicit and independent and removed `assign_target` from existing/default Zonal Admin and Center Admin role permissions.
+- Blocked duplicate Group creation when the exact same two approved Sankalp Karyakars already form a Group, while still allowing either Karyakar to pair with someone else.
+- Hardened Manual Family registration: sequential member entry, 10-digit mobile validation, duplicate Head-mobile prevention, female/member-selected Head synchronization, and a migration that repairs existing marked-Head names.
+- Added multi-select Family assignment to Groups, immediately excludes already assigned Families from selection, and keeps transfers in the Group detail workflow.
+- Clarified Area/Society assignment workflow and made record/area search selection behavior less error-prone.
+- Fixed Analysis/Audit native select controls that were rendered as read-only controlled selects; Analysis now includes Group member labels and an Active / Non-active Group filter.
+- Karyalay inward Inventory transactions now publish a Center-scoped announcement with item, quantity, reference and note details.
+- Added deployment-time role-permission correction and historical Family-head backfill migrations.
+- Static source integrity passes with 32 Inertia pages, 88 named routes, 43 seeded permissions and 39 route/navigation permissions in active use. PHP and TSX syntax checks pass. Full Laravel/Vite runtime tests still require Composer/NPM dependencies and deployment services.
+
+## 1.0.14 - Figma-reference UI refinement and mobile app polish - 2026-08-19
+
+- Preserved all v1.0.13 functionality, routes, permissions, database behavior and runtime hardening.
+- Rebuilt the shared desktop shell into a cleaner light navigation rail with grouped sections, clearer active states and compact profile treatment.
+- Reworked the desktop top bar with active-page context and role/user hierarchy.
+- Reworked mobile navigation into a floating app-style bottom navigation surface and grouped More bottom sheet with safe-area support.
+- Consolidated global UI styling into a single token-based visual system for cards, forms, buttons, badges, alerts, modals and tables.
+- Upgraded the dashboard hero, completion presentation, KPI cards, quick actions and leaderboards without changing dashboard data or permissions.
+- Upgraded the login page for stronger desktop/mobile visual hierarchy without changing authentication behavior.
+- Maintained stacked mobile record cards for tabular screens and strengthened 320px-390px responsiveness.
+- Static integrity and PHP syntax validation pass. Full Vite build remains dependent on installing npm dependencies in a network-enabled environment.
+
+## 1.0.13 - Responsive UI polish and mobile app experience - 2026-08-19
+
+- Refreshed the shared authenticated shell without changing routes, permissions, controllers, data contracts, workflows or database behavior.
+- Polished the desktop experience with a 280px navigation rail, modern active states, sticky translucent header, improved content width and stronger visual hierarchy.
+- Upgraded the mobile app-like presentation with refined app bar/bottom navigation, touch-friendly menu sheet, safer spacing and consistent phone card treatment.
+- Reworked the dashboard presentation with a richer campaign hero, compact progress metrics, polished KPI cards and improved leaderboard surfaces while preserving all existing dashboard calculations/actions.
+- Reworked login presentation into a split desktop surface and full-screen mobile entry while preserving the existing authentication flow and infrastructure warnings.
+- Unified cards, buttons, inputs, badges and tables through shared visual tokens so administration, registration, assignments, monitoring, Bal Pravruti and support pages inherit the same responsive design language.
+- Static integrity validation passes with 32 Inertia pages, 88 named routes, 43 seeded permissions and 39 route/navigation permissions in active use.
+- Full npm/Vite compilation could not be re-run in the isolated packaging environment because dependency installation did not complete; no application dependency versions were changed.
+
 ## 1.0.12 - Redis queue timeout and production host diagnostics - 2026-08-19
 
 - Fixed a confirmed Redis queue configuration bug where `block_for=5` seconds was paired with a global PhpRedis `read_timeout=2` seconds, causing recurring `RedisException: read error on connection to redis:6379` while workers waited normally for jobs.

@@ -19,6 +19,7 @@ class CenterController extends Controller
         return Inertia::render('admin/centers', [
             'centers' => $scope->centers($request->user())->orderBy('name')->get(),
             'zones' => $scope->zones($request->user())->where('status', 'active')->orderBy('name')->get(['id', 'name', 'code']),
+            'canManageCenters' => $request->user()->hasPermission('manage_centers'),
         ]);
     }
 
