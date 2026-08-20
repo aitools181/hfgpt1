@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { Download, Filter } from 'lucide-react';
 import AppLayout from '../../layouts/app-layout';
+import LiveFilterForm from '../../components/live-filter-form';
 
 type Option = { id:number; name?:string; code?:string; group_code?:string; full_name?:string };
 type Filters = { center_id:number|null; group_id:number|null; karyakar_id:number|null; area_id:number|null; gender:string|null; category:string|null; status:string|null; date_from:string|null; date_to:string|null; female_scope_locked:boolean };
@@ -13,7 +14,7 @@ export default function Reports({report,reportTypes,options}:Props){
     const exportHref = `/monitoring/reports/export?${queryString(report.type, report.filters)}`;
     return <AppLayout title="Reports"><Head title="Reports"/>
         <section className="hf-card mb-5 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs font-bold uppercase tracking-[.15em] text-[#7b5f87]">Required reporting suite</div><h2 className="text-xl font-black text-[#351342]">{report.title}</h2><p className="mt-1 text-sm text-[#716176]">Filters apply inside the signed-in user's Center/Zone/organization scope.</p></div><div className="flex gap-2"><Link href="/monitoring/analysis" className="hf-btn hf-btn-secondary">Analysis</Link><a href={exportHref} className="hf-btn inline-flex items-center gap-2"><Download size={16}/> Export CSV</a></div></div>
-            <form method="get" action="/monitoring/reports" className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <LiveFilterForm action="/monitoring/reports" className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <div><label className="hf-label">Report</label><select className="hf-input" name="report" defaultValue={report.type}>{Object.entries(reportTypes).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></div>
                 <Select name="center_id" label="Center" value={report.filters.center_id ?? ''}><option value="">All permitted centers</option>{options.centers.map(o=><option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}</Select>
                 <Select name="group_id" label="Group" value={report.filters.group_id ?? ''}><option value="">All groups</option>{options.groups.map(o=><option key={o.id} value={o.id}>{o.group_code}</option>)}</Select>
@@ -26,7 +27,7 @@ export default function Reports({report,reportTypes,options}:Props){
                 <div><label className="hf-label">From</label><input className="hf-input" type="date" name="date_from" defaultValue={report.filters.date_from ?? ''}/></div>
                 <div><label className="hf-label">To</label><input className="hf-input" type="date" name="date_to" defaultValue={report.filters.date_to ?? ''}/></div>
                 <div className="flex items-end gap-2"><button className="hf-btn inline-flex items-center gap-2" type="submit"><Filter size={16}/> Generate</button><Link className="hf-btn hf-btn-secondary" href={`/monitoring/reports?report=${report.type}`}>Reset</Link></div>
-            </form>
+            </LiveFilterForm>
         </section>
         {report.filters.female_scope_locked && <div className="mb-5 rounded-xl border border-fuchsia-200 bg-fuchsia-50 p-4 text-sm font-semibold text-fuchsia-900">BN Karyalay gender analysis is fixed to Female.</div>}
         <section className="hf-card overflow-hidden"><div className="flex items-center justify-between gap-3 border-b border-[#eadff0] p-4"><div><div className="font-extrabold">{report.title}</div><div className="text-xs text-[#75667a]">{report.truncated ? `Showing first ${report.row_limit} rows - use CSV for the full dataset` : `${report.rows.length} row(s)`}</div></div><a href={exportHref} className="hf-btn hf-btn-secondary inline-flex items-center gap-2"><Download size={15}/> CSV</a></div><div className="overflow-x-auto"><div className="hf-table-scroll"><table className="hf-table hf-mobile-table"><thead><tr>{Object.values(report.columns).map((label)=><th key={label}>{label}</th>)}</tr></thead><tbody>{report.rows.length===0?<tr><td colSpan={Object.keys(report.columns).length}>No data found for the selected filters.</td></tr>:report.rows.map((row,index)=><tr key={index}>{Object.keys(report.columns).map(key=><td key={key}>{format(row[key])}</td>)}</tr>)}</tbody></table></div></div></section>

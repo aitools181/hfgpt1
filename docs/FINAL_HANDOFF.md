@@ -1,8 +1,8 @@
-# Final Handoff - SMVS Happy Family Portal v1.0.15
+# Final Handoff - SMVS Happy Family Portal v1.0.16
 
 ## Release purpose
 
-v1.0.15 is the cumulative portal release based on v1.0.14 UI refinement and v1.0.12 runtime hardening, plus the focused corrections captured in the 2026-08-19 testing report/screenshots. Use this package instead of v1.0.14 or earlier for the next deployment/retest.
+v1.0.16 is the cumulative portal release based on v1.0.15 bug fixes, v1.0.14 UI refinement and v1.0.12 runtime hardening. It adds portal-wide live search and automatic filtering while preserving existing scope, permissions, pagination and business rules. Use this package instead of v1.0.15 or earlier for the next deployment/retest.
 
 ## Bug-fix highlights
 
@@ -41,3 +41,8 @@ See `V1_0_15_BUG_FIX_VALIDATION.md` for the screenshot-to-fix matrix and retest 
 ## Validation status
 
 Static integrity, complete PHP syntax and TSX syntax validation pass. The packaging environment has no Composer `vendor/` or NPM `node_modules/`, and dependency installation did not finish, so live Laravel tests, TypeScript semantic type-check, Vite build and deployed browser/database retests must run in CI/deployment before final acceptance.
+
+
+## v1.0.16 live search note
+
+Search text now refreshes matching data after a short debounce and select/date filters refresh automatically. Existing Search/Apply buttons remain optional fallback controls. No database migration was added in v1.0.16.

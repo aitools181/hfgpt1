@@ -1,3 +1,13 @@
+## 1.0.16 - Live search and automatic filters - 2026-08-20
+
+- Added a shared `LiveFilterForm` for GET-based filter/search screens. Text-like search inputs debounce for 300 ms; select/date/checkbox/radio changes refresh immediately through Inertia.
+- Converted Group, Family and Karyakar register toolbars from Enter-key search to live typing results.
+- Converted Portal Users and Activity/Audit Logs to live typing/filter refresh while keeping their existing Search/Apply buttons as optional manual fallback.
+- Converted Monitoring Analysis, Reports and Bal Analysis filter forms to auto-refresh on filter/date changes.
+- Converted Assigned Targets list filters to the same shared auto-filter behavior.
+- Audited existing bounded remote option searches (Group Karyakars, Area/Society assignment, Target options, Group Family assignment, Bal Group selectors, Bal completion Family lookup and User/Karyakar linking); these already debounce and update their option lists live and remain unchanged functionally.
+- Preserved all server-side scope, permissions, bounded-query limits, pagination and business rules; no schema migration is required for this release.
+
 # Changelog
 
 ## 1.0.15 - Testing-report bug fixes and workflow validation hardening - 2026-08-19

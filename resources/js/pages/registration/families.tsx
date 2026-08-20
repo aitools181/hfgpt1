@@ -1,7 +1,8 @@
-import { Form, Link, router } from '@inertiajs/react';
+import { Form, Link } from '@inertiajs/react';
 import AppLayout from '../../layouts/app-layout';
 import FormField from '../../components/form-field';
 import { useMemo, useState } from 'react';
+import LiveFilterForm from '../../components/live-filter-form';
 import { Plus, Search, Trash2 } from 'lucide-react';
 
 type Center = { id:number; name:string; code:string };
@@ -20,7 +21,6 @@ export default function Families({ families, centers, areas, societies, filters 
     const [memberAddError, setMemberAddError] = useState('');
     const relevantAreas = useMemo(() => areas.filter(a => String(a.center_id) === centerId), [areas, centerId]);
     const relevantSocieties = useMemo(() => societies.filter(s => String(s.center_id) === centerId && areaId !== '' && String(s.sampark_area_id ?? '') === areaId), [societies, centerId, areaId]);
-    const filter = (key:string, value:string) => router.get('/registration/families', { ...filters, [key]:value }, { preserveState:true, replace:true });
     const memberComplete = (m:MemberDraft) => m.name.trim() !== '' && m.age !== '' && m.relationship.trim() !== '';
     const addMember = () => {
         const last = members[members.length - 1];
@@ -38,13 +38,13 @@ export default function Families({ families, centers, areas, societies, filters 
                     <div><h2 className="font-extrabold text-lg">Family Register</h2><p className="text-sm text-[#76647e]">Imported and manually registered families; Family ID is the primary reference.</p></div>
                     <span className="hf-badge">{families.total} families</span>
                 </div>
-                <div className="grid gap-2 md:grid-cols-5 mb-4">
-                    <div className="relative"><Search size={16} className="absolute left-3 top-3 text-[#8c7994]"/><input className="hf-input pl-9" placeholder="ID, head, mobile" defaultValue={filters.search ?? ''} onKeyDown={e => { if(e.key==='Enter') filter('search',(e.target as HTMLInputElement).value); }}/></div>
-                    <select className="hf-input" value={filters.center_id ?? ''} onChange={e=>filter('center_id',e.target.value)}><option value="">All centers</option>{centers.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}</select>
-                    <select className="hf-input" value={filters.source ?? ''} onChange={e=>filter('source',e.target.value)}><option value="">All sources</option><option value="global">SMVS Global</option><option value="manual">Manual</option><option value="karyakar_reported">Karyakar Reported</option></select>
-                    <select className="hf-input" value={filters.status ?? ''} onChange={e=>filter('status',e.target.value)}><option value="">All status</option><option value="active">Active</option><option value="pending_verification">Pending Verification</option><option value="inactive">Inactive</option></select>
-                    <select className="hf-input" value={filters.gender ?? ''} onChange={e=>filter('gender',e.target.value)}><option value="">Any member gender</option><option value="male">Male member</option><option value="female">Female member</option></select>
-                </div>
+                <LiveFilterForm action="/registration/families" className="grid gap-2 md:grid-cols-5 mb-4">
+                    <div className="relative"><Search size={16} className="absolute left-3 top-3 text-[#8c7994]"/><input name="search" className="hf-input pl-9" placeholder="ID, head, mobile" defaultValue={filters.search ?? ''}/></div>
+                    <select name="center_id" className="hf-input" defaultValue={filters.center_id ?? ''}><option value="">All centers</option>{centers.map(c=><option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}</select>
+                    <select name="source" className="hf-input" defaultValue={filters.source ?? ''}><option value="">All sources</option><option value="global">SMVS Global</option><option value="manual">Manual</option><option value="karyakar_reported">Karyakar Reported</option></select>
+                    <select name="status" className="hf-input" defaultValue={filters.status ?? ''}><option value="">All status</option><option value="active">Active</option><option value="pending_verification">Pending Verification</option><option value="inactive">Inactive</option></select>
+                    <select name="gender" className="hf-input" defaultValue={filters.gender ?? ''}><option value="">Any member gender</option><option value="male">Male member</option><option value="female">Female member</option></select>
+                </LiveFilterForm>
                 <div className="hf-table-scroll"><table className="hf-table hf-mobile-table min-w-[1040px]"><thead><tr><th>Family</th><th>Head / Contact</th><th>Center</th><th>Members</th><th>Area / Society</th><th>Group</th><th>Source</th><th>Status</th></tr></thead><tbody>
                     {families.data.map(f=><tr key={f.id}><td><Link className="font-bold text-[#6a1b9a]" href={`/registration/families/${f.id}`}>{f.external_family_id ?? f.manual_reference}</Link></td><td><div className="font-semibold">{f.head_name}</div><div className="text-xs text-[#7d6c84]">{f.head_mobile?<a className="font-bold text-[#6a1b9a]" href={`tel:${f.head_mobile}`}>Call {f.head_mobile}</a>:'No mobile'}</div></td><td>{f.center.code}</td><td><div>{f.members_count} total</div><div className="text-xs">M {f.male_count} / F {f.female_count}</div></td><td>{f.area?.name ?? '-'}<div className="text-xs text-[#7d6c84]">{f.society?.name ?? ''}</div></td><td>{f.group_assignments?.length?<Link className="hf-badge" href={`/assignments/groups/${f.group_assignments[0].group.id}`}>{f.group_assignments[0].group.group_code} · {f.group_assignments[0].assignment_type}</Link>:<span className="text-xs text-[#76647e]">Unassigned</span>}</td><td><span className="hf-badge">{f.source === 'global' ? 'Global' : f.source === 'karyakar_reported' ? 'Karyakar Reported' : 'Manual'}</span></td><td className="capitalize">{f.status}</td></tr>)}
                     {families.data.length===0 && <tr><td colSpan={8} className="text-center text-[#7d6c84] py-8">No family records found.</td></tr>}
