@@ -1,6 +1,7 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import AppLayout from '../../layouts/app-layout';
+import LiveFilterForm from '../../components/live-filter-form';
 import type { PageProps } from '../../types';
 
 type Role = { id: number; name: string; slug: string; module: string };
@@ -92,11 +93,11 @@ export default function Users({ users, roles, zones, centers, karyakars, canMana
                     </div>
                     {canResetPasswords && <span className="hf-badge">Password reset enabled</span>}
                 </div>
-                <form method="get" action="/admin/users" className="mb-4 flex flex-wrap gap-2">
+                <LiveFilterForm action="/admin/users" className="mb-4 flex flex-wrap gap-2">
                     <input className="hf-input max-w-md" name="search" defaultValue={userSearch} placeholder="Search user name or email" />
                     <button className="hf-btn" type="submit">Search</button>
                     {userSearch && <a className="hf-btn hf-btn-secondary" href="/admin/users">Clear</a>}
-                </form>
+                </LiveFilterForm>
                 {userListTruncated && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Large user list detected. Showing a safe bounded result set; use search to find any specific user.</div>}
                 <div className="hf-table-scroll"><table className="hf-table hf-mobile-table">
                     <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Scope</th><th>Status</th><th>Last password reset</th>{canResetPasswords && <th>Security action</th>}</tr></thead>

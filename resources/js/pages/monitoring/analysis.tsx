@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import { BarChart3, Download, Filter, Trophy } from 'lucide-react';
 import AppLayout from '../../layouts/app-layout';
+import LiveFilterForm from '../../components/live-filter-form';
 
 type Option = { id:number; name?:string; code?:string; group_code?:string; full_name?:string; gender?:string; category?:string; center_id?:number; status?:string; member_names?:string[] };
 type Filters = { center_id:number|null; group_id:number|null; karyakar_id:number|null; area_id:number|null; gender:string|null; category:string|null; status:string|null; group_status:string|null; date_from:string|null; date_to:string|null; female_scope_locked:boolean };
@@ -63,7 +64,7 @@ export default function Analysis({ analysis, options }: Props) {
 }
 
 function FilterForm({filters, options}:{filters:Filters; options:Props['options']}) {
-    return <form method="get" action="/monitoring/analysis" className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+    return <LiveFilterForm action="/monitoring/analysis" className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Select name="center_id" label="Center" value={filters.center_id ?? ''}><option value="">All permitted centers</option>{options.centers.map(o=><option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}</Select>
         <Select name="group_id" label="Group" value={filters.group_id ?? ''}><option value="">All groups</option>{options.groups.map(o=><option key={o.id} value={o.id}>{o.group_code}{o.member_names?.length?` — ${o.member_names.join(' + ')}`:''}</option>)}</Select>
         <Select name="group_status" label="Group Status" value={filters.group_status ?? ''}><option value="">All group status</option><option value="active">Active</option><option value="non_active">Non-active (Draft / Closed)</option></Select>
@@ -75,7 +76,7 @@ function FilterForm({filters, options}:{filters:Filters; options:Props['options'
         <div><label className="hf-label">From</label><input className="hf-input" type="date" name="date_from" defaultValue={filters.date_from ?? ''}/></div>
         <div><label className="hf-label">To</label><input className="hf-input" type="date" name="date_to" defaultValue={filters.date_to ?? ''}/></div>
         <div className="flex items-end gap-2"><button className="hf-btn inline-flex items-center gap-2" type="submit"><Filter size={16}/> Apply</button><Link className="hf-btn hf-btn-secondary" href="/monitoring/analysis">Reset</Link></div>
-    </form>;
+    </LiveFilterForm>;
 }
 function Select({label,children,value,...props}:any){return <div><label className="hf-label">{label}</label><select key={`${props.name??label}-${String(value)}`} className="hf-input" defaultValue={value} {...props}>{children}</select></div>}
 function Metric({label,value}:{label:string;value:string|number}){return <div className="hf-card p-5"><div className="text-sm font-semibold text-[#7a657f]">{label}</div><div className="mt-2 text-3xl font-black text-[#5f187c]">{value}</div></div>}
